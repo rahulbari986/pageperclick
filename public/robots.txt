@@ -1,0 +1,25 @@
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: *
+Allow: /
+
+# Allow all web crawlers to access all content
+User-agent: *
+Allow: /
+
+# Prevent crawlers from accessing legal pages
+Disallow: /privacy-policy
+Disallow: /terms-and-conditions
+
+# Location of the sitemap
+Sitemap: https://www.pageperclick.com/sitemap.xml
