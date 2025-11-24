@@ -109,7 +109,7 @@ const Index = () => {
                 </a>
               </div>
               <h1 className=" text-4xl md:text-6xl lg:text-6xl font-heading leading-tight ">
-                Digital Marketing That Drives
+                Digital
                 <span className="ml-3 bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent animate-gradient">
                   Authentic Results
                 </span>
