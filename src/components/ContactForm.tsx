@@ -159,8 +159,18 @@ export const ContactForm = () => {
           // Revert optimistic UI update on failure (Section 3.1)
           setFormStatus('FORM');
           setFormData(previousFormData);
-          throw new Error(result.error || "An unknown error occurred.");
+          const firstDetail = result.details
+            ? (Object.values(result.details) as string[][]).flat()[0]
+            : null;
+          const errorMsg = firstDetail || result.error || "Submission failed. Please check your inputs.";
+          toast({
+            title: "Submission Notice",
+            description: errorMsg,
+            variant: "destructive",
+          });
         }
+        recaptchaRef.current?.reset();
+        return;
       } else {
         toast({
           title: "Inquiry Received",

@@ -15,16 +15,15 @@ const mongoBreaker = new CircuitBreaker("MongoDBAtlas", { failureThreshold: 3, r
 const contactSubmissionSchema = z.object({
   fullName: z
     .string()
-    .min(2, "Full name must be at least 2 characters")
-    .max(100, "Full name must not exceed 100 characters")
-    .regex(/^[\p{L}\s.'-]+$/u, "Name contains invalid characters"),
+    .min(1, "Full name is required")
+    .max(100, "Full name must not exceed 100 characters"),
   email: z
     .string()
     .email("Invalid email format")
     .max(255, "Email is too long"),
   phone: z
     .string()
-    .regex(/^[6-9]\d{9}$/, "Phone number must be a valid 10-digit Indian mobile number"),
+    .regex(/^\d{10}$/, "Phone number must be a 10-digit mobile number"),
   company: z
     .string()
     .max(100, "Company name must not exceed 100 characters")
@@ -36,11 +35,11 @@ const contactSubmissionSchema = z.object({
     .max(100, "Service selection is invalid"),
   message: z
     .string()
-    .min(5, "Message must be at least 5 characters")
+    .min(1, "Please enter a message")
     .max(2000, "Message must not exceed 2000 characters"),
   recaptchaToken: z
     .string()
-    .min(10, "Verification token is required"),
+    .min(1, "Verification token is required"),
   utm_source: z.string().max(100).optional().nullable(),
   utm_medium: z.string().max(100).optional().nullable(),
   utm_campaign: z.string().max(100).optional().nullable(),
