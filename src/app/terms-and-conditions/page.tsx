@@ -1,21 +1,23 @@
-import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
+import type { Metadata } from "next";
+import Link from "next/link";
 
-const TermsAndConditions = () => {
+export const metadata: Metadata = {
+  title: "Terms & Conditions | Page Per Click",
+  robots: {
+    index: false,
+    follow: false,
+  },
+  alternates: {
+    canonical: "https://www.pageperclick.com/terms-and-conditions",
+  },
+};
+
+export default function TermsAndConditionsPage() {
   return (
     <div className="min-h-screen bg-background">
-      <Helmet>
-        <title>Terms & Conditions | Page Per Click</title>
-        <meta name="robots" content="noindex" />
-        <link
-          rel="canonical"
-          href="https://www.pageperclick.com/terms-and-conditions"
-        />
-      </Helmet>
-
       <header>
         <div className="container mx-auto px-6 md:px-4 py-5 md:py-10">
-          <Link to="/">
+          <Link href="/">
             <img
               src="/header.png"
               alt="Page Per Click Logo"
@@ -39,8 +41,7 @@ const TermsAndConditions = () => {
         </p>
 
         <section
-          className="mb-8 bg-card/30 border border-border/50 rounded-lg p-6
-                     ✅ ADDED: transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50"
+          className="mb-8 bg-card/30 border border-border/50 rounded-lg p-6 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50"
         >
           <h2 className="text-2xl font-heading text-foreground mb-4 flex items-center gap-2">
             <span className="text-primary">1.</span> Services
@@ -59,8 +60,7 @@ const TermsAndConditions = () => {
         </section>
 
         <section
-          className="mb-8 bg-card/30 border border-border/50 rounded-lg p-6
-                     ✅ ADDED: transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50"
+          className="mb-8 bg-card/30 border border-border/50 rounded-lg p-6 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50"
         >
           <h2 className="text-2xl font-heading text-foreground mb-4 flex items-center gap-2">
             <span className="text-primary">2.</span> User Responsibilities
@@ -81,8 +81,7 @@ const TermsAndConditions = () => {
         </section>
 
         <section
-          className="mb-8 bg-card/30 border border-border/50 rounded-lg p-6
-                     ✅ ADDED: transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50"
+          className="mb-8 bg-card/30 border border-border/50 rounded-lg p-6 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50"
         >
           <h2 className="text-2xl font-heading text-foreground mb-4 flex items-center gap-2">
             <span className="text-primary">3.</span> Payments & Refunds
@@ -104,8 +103,7 @@ const TermsAndConditions = () => {
         </section>
 
         <section
-          className="mb-8 bg-card/30 border border-border/50 rounded-lg p-6
-                     ✅ ADDED: transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50"
+          className="mb-8 bg-card/30 border border-border/50 rounded-lg p-6 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50"
         >
           <h2 className="text-2xl font-heading text-foreground mb-4 flex items-center gap-2">
             <span className="text-primary">4.</span> Intellectual Property
@@ -123,8 +121,7 @@ const TermsAndConditions = () => {
         </section>
 
         <section
-          className="mb-8 bg-card/30 border border-border/50 rounded-lg p-6
-                     ✅ ADDED: transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50"
+          className="mb-8 bg-card/30 border border-border/50 rounded-lg p-6 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50"
         >
           <h2 className="text-2xl font-heading text-foreground mb-4 flex items-center gap-2">
             <span className="text-primary">5.</span> Limitation of Liability
@@ -143,8 +140,7 @@ const TermsAndConditions = () => {
         </section>
 
         <section
-          className="mb-8 bg-card/30 border border-border/50 rounded-lg p-6
-                     ✅ ADDED: transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50"
+          className="mb-8 bg-card/30 border border-border/50 rounded-lg p-6 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50"
         >
           <h2 className="text-2xl font-heading text-foreground mb-4 flex items-center gap-2">
             <span className="text-primary">6.</span> Third-Party Services
@@ -162,8 +158,7 @@ const TermsAndConditions = () => {
         </section>
 
         <section
-          className="mb-8 bg-card/30 border border-border/50 rounded-lg p-6
-                     ✅ ADDED: transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50"
+          className="mb-8 bg-card/30 border border-border/50 rounded-lg p-6 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50"
         >
           <h2 className="text-2xl font-heading text-foreground mb-4 flex items-center gap-2">
             <span className="text-primary">7.</span> Termination
@@ -178,8 +173,7 @@ const TermsAndConditions = () => {
         </section>
 
         <section
-          className="mb-8 bg-card/30 border border-border/50 rounded-lg p-6
-                     ✅ ADDED: transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50"
+          className="mb-8 bg-card/30 border border-border/50 rounded-lg p-6 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50"
         >
           <h2 className="text-2xl font-heading text-foreground mb-4 flex items-center gap-2">
             <span className="text-primary">8.</span> Governing Law
@@ -191,8 +185,7 @@ const TermsAndConditions = () => {
         </section>
 
         <section
-          className="mb-8 bg-card/30 border border-border/50 rounded-lg p-6
-                     ✅ ADDED: transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50"
+          className="mb-8 bg-card/30 border border-border/50 rounded-lg p-6 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/10 hover:border-primary/50"
         >
           <h2 className="text-2xl font-heading text-foreground mb-4 flex items-center gap-2">
             <span className="text-primary">9.</span> Contact Us
@@ -204,8 +197,7 @@ const TermsAndConditions = () => {
             Email:{" "}
             <a
               href="mailto:pageperclick@gmail.com"
-              className="text-primary hover:underline transition-all
-                         ✅ ADDED: inline-block hover:scale-105"
+              className="text-primary hover:underline transition-all inline-block hover:scale-105"
             >
               pageperclick@gmail.com
             </a>
@@ -213,8 +205,7 @@ const TermsAndConditions = () => {
             Website:{" "}
             <a
               href="https://www.pageperclick.com"
-              className="text-primary hover:underline transition-all
-                         ✅ ADDED: inline-block hover:scale-105"
+              className="text-primary hover:underline transition-all inline-block hover:scale-105"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -225,9 +216,8 @@ const TermsAndConditions = () => {
 
         <footer className="mb-10 mx-6 border-t border-border/50 pt-6">
           <Link
-            to="/"
-            className="text-primary hover:text-secondary transition-all inline-flex items-center gap-2
-                       ✅ ADDED: hover:scale-105 hover:-translate-y-0.5 hover:shadow-lg"
+            href="/"
+            className="text-primary hover:text-secondary transition-all inline-flex items-center gap-2 hover:scale-105 hover:-translate-y-0.5 hover:shadow-lg"
           >
             ← Back to Home
           </Link>
@@ -235,6 +225,4 @@ const TermsAndConditions = () => {
       </main>
     </div>
   );
-};
-
-export default TermsAndConditions;
+}

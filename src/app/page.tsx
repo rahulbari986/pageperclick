@@ -1,8 +1,9 @@
-import { Suspense, lazy } from "react";
+"use client";
+
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { ServiceCard } from "@/components/ServiceCard";
 import { StatCard } from "@/components/StatCard";
-// After (in index.tsx)
 import Facebook from "lucide-react/dist/esm/icons/facebook";
 import Youtube from "lucide-react/dist/esm/icons/youtube";
 import Linkedin from "lucide-react/dist/esm/icons/linkedin";
@@ -18,71 +19,32 @@ import Target from "lucide-react/dist/esm/icons/target";
 import Zap from "lucide-react/dist/esm/icons/zap";
 import Rocket from "lucide-react/dist/esm/icons/rocket";
 import MapPin from "lucide-react/dist/esm/icons/map-pin";
-import heroImage from "@/assets/hero-modern.webp";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
+import Link from "next/link";
 
-// Add this lazy import instead
-const ContactForm = lazy(() =>
-  import("@/components/ContactForm").then((module) => ({
-    default: module.ContactForm,
-  })),
+// Dynamic client import for ContactForm
+const ContactForm = dynamic(
+  () => import("@/components/ContactForm").then((mod) => mod.ContactForm),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-96 text-muted-foreground">
+        Loading form...
+      </div>
+    ),
+  }
 );
 
-// CLIENT DATA ARRAY
-const clients = [
-  {
-    name: "Sai Techno Works",
-    location: "Pune",
-    services: "Social Media Management",
-    impact:
-      "Built a consistent local presence that turned social engagement into footfall.",
-  },
-  {
-    name: "Bhoomi Homez",
-    location: "Bengaluru",
-    services: "PPC Advertising & Graphic Design",
-    impact:
-      "High-performing ads and striking creatives that increased qualified leads.",
-  },
-  {
-    name: "Ace Careers",
-    location: "Bengaluru",
-    services: "Local SEO & Google My Business Optimization",
-    impact:
-      "Improved local visibility and steady organic searches from prospective students.",
-  },
-  {
-    name: "Divya Drusti Spiritual Products",
-    location: "Bidar",
-    services: "Meta Advertising",
-    impact:
-      "Targeted Meta campaigns that grew online orders and repeat customers.",
-  },
-];
-
-const Index = () => {
+export default function Home() {
   return (
     <div className="relative min-h-screen bg-background text-foreground overflow-x-hidden">
-      <Helmet>
-        <title>Digital Marketing That Drives Real Results | Page Per Click</title>
-        <link rel="canonical" href="https://www.pageperclick.com/" />
-        <meta
-          name="description"
-          content="We help businesses attract quality leads, boost engagement, and grow with high-performing campaigns."
-        />
-        <link rel="icon" href="/logo.png" type="image/png" />
-        <link rel="apple-touch-icon" href="/logo.png" />
-      </Helmet>
-
       {/* Animated Background Elements */}
-      <div className=" inset-0 pointer-events-none overflow-hidden">
+      <div className="inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-20 left-10 w-72 h-72 bg-primary/20 rounded-full blur-[100px] animate-float" />
         <div
           className="absolute bottom-20 right-10 w-96 h-96 bg-accent/20 rounded-full blur-[120px] animate-float"
@@ -95,20 +57,20 @@ const Index = () => {
       </div>
 
       {/* Hero Section */}
-      <section className="relative px-2 py-5 md:2 md:py-10 overflow-hidden">
+      <section className="relative px-2 py-5 md:py-10 overflow-hidden">
         <div className="container mx-auto px-4 relative z-10">
           <div className="grid lg:grid-cols-2 gap-10 lg:gap-10 items-start">
             <div className="space-y-5 md:space-y-12 animate-fade-in">
-              <div className="relative w-fit  ">
-                <a href="/">
+              <div className="relative w-fit">
+                <Link href="/">
                   <img
                     src="/header.png"
                     alt="Page Per Click Logo"
                     className="inline-block mt-0 md:mt-4 w-28 h-20 md:w-40 md:h-20 object-contain"
                   />
-                </a>
+                </Link>
               </div>
-              <h1 className=" text-4xl md:text-6xl lg:text-6xl font-heading leading-tight ">
+              <h1 className="text-4xl md:text-6xl lg:text-6xl font-heading leading-tight">
                 Digital Marketing That Drives
                 <span className="ml-3 bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent animate-gradient">
                   Authentic Results
@@ -138,7 +100,7 @@ const Index = () => {
             >
               <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-accent/20 rounded-3xl blur-3xl" />
               <img
-                src={heroImage}
+                src="/hero-modern.webp"
                 alt="Digital marketing dashboard with analytics and growth charts"
                 className="rounded-2xl shadow-2xl relative z-10 border border-primary/20"
               />
@@ -204,7 +166,6 @@ const Index = () => {
             </p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 justify-center">
-            {/* ✅ WRAPPED EACH ServiceCard WITH A DIV TO ADD HOVER EFFECTS */}
             <div className="transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:shadow-primary/20 rounded-2xl">
               <ServiceCard
                 icon={TrendingUp}
@@ -244,57 +205,6 @@ const Index = () => {
         </div>
       </section>
 
-      {/* Clients Section */}
-      {/* <section id="clients" className="py-12 md:py-20 relative">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-12 md:mb-16 space-y-4">
-            <h2 className="text-4xl md:text-5xl font-heading">
-              Our{" "}
-              <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                Clients
-              </span>
-            </h2>
-            <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-              We're proud to work with local businesses and entrepreneurs who
-              trust us to grow their digital presence.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-            {clients.map((client, index) => (
-              <div
-                key={index}
-                className="group bg-card border border-border rounded-2xl p-6 hover:border-primary/50 
-               hover:scale-105 hover:shadow-2xl hover:shadow-primary/30 
-               transition-all duration-300"
-              >
-                <div className="mb-4">
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors shadow-lg shadow-primary/20">
-                    <MapPin className="h-6 w-6 text-primary" />
-                  </div>
-                </div>
-
-                <h3 className="text-lg font-bold mb-2 text-foreground">
-                  {client.name}
-                </h3>
-
-                <div className="text-sm text-muted-foreground mb-1">
-                  {client.location}
-                </div>
-
-                <div className="text-sm text-muted-foreground mb-3 font-medium">
-                  {client.services}
-                </div>
-
-                <p className="text-sm text-muted-foreground/90 leading-relaxed">
-                  {client.impact}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section> */}
-
       {/* Proven Results Section */}
       <section className="py-12 md:py-20 relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-secondary/5 to-accent/10" />
@@ -311,7 +221,6 @@ const Index = () => {
             </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-12 md:mb-16 justify-center items-center mx-auto">
-            {/* You can apply the same wrapper DIV trick to your StatCards as I did for the ServiceCards */}
             <StatCard value="4+" label="Years of Industry Experience" />
             <StatCard value="100+" label="Successful Campaigns" />
             <StatCard value="3.5x" label="Average ROAS" />
@@ -368,14 +277,12 @@ const Index = () => {
                 >
                   <div className="flex items-center gap-4">
                     <div
-                      className={`w-12 h-12 rounded-2xl bg-gradient-to-br from-${item.color} to-${item.color}/50 flex items-center justify-center text-2xl font-bold text-white shadow-lg`}
+                      className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary to-primary/50 flex items-center justify-center text-2xl font-bold text-white shadow-lg"
                     >
                       {item.step}
                     </div>
-                    <div
-                      className={`p-3 rounded-xl bg-${item.color}/10 border border-${item.color}/20`}
-                    >
-                      <item.icon className={`w-6 h-6 text-${item.color}`} />
+                    <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
+                      <item.icon className="w-6 h-6 text-primary" />
                     </div>
                   </div>
                   <h3 className="text-2xl font-heading">{item.title}</h3>
@@ -490,12 +397,7 @@ const Index = () => {
                   </a>
                 </div>
                 <div>
-                  <a
-                    // href="https://www.google.com/maps/search/?api=1&query=Bangalore"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-4 py-4 hover:border-primary transition-all group"
-                  >
+                  <div className="inline-flex items-center gap-4 py-4 hover:border-primary transition-all group">
                     <div
                       className="w-12 h-12 rounded-full bg-gradient-to-br from-accent to-primary flex items-center justify-center flex-shrink-0
                                    group-hover:scale-110 transition-transform"
@@ -505,22 +407,14 @@ const Index = () => {
                     <span className="font-semibold text-lg group-hover:text-primary transition-colors">
                       Bangalore, India (Serving clients globally)
                     </span>
-                  </a>
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Right Side - Form */}
             <div>
-              <Suspense
-                fallback={
-                  <div className="flex items-center justify-center h-96">
-                    Loading form...
-                  </div>
-                }
-              >
-                <ContactForm />
-              </Suspense>
+              <ContactForm />
             </div>
           </div>
         </div>
@@ -597,8 +491,8 @@ const Index = () => {
               href="https://www.facebook.com/pageperclicks"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-primary transition-transform
-                         hover:scale-125 hover:-translate-y-1 duration-200"
+              aria-label="Facebook"
+              className="hover:text-primary transition-transform hover:scale-125 hover:-translate-y-1 duration-200"
             >
               <Facebook className="w-5 h-5" />
             </a>
@@ -606,8 +500,8 @@ const Index = () => {
               href="http://instagram.com/pageperclick/"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-primary transition-transform
-                         hover:scale-125 hover:-translate-y-1 duration-200"
+              aria-label="Instagram"
+              className="hover:text-primary transition-transform hover:scale-125 hover:-translate-y-1 duration-200"
             >
               <Instagram className="w-5 h-5" />
             </a>
@@ -615,8 +509,8 @@ const Index = () => {
               href="http://www.youtube.com/@pageperclick"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-primary transition-transform
-                         hover:scale-125 hover:-translate-y-1 duration-200"
+              aria-label="YouTube"
+              className="hover:text-primary transition-transform hover:scale-125 hover:-translate-y-1 duration-200"
             >
               <Youtube className="w-5 h-5" />
             </a>
@@ -624,8 +518,8 @@ const Index = () => {
               href="https://www.linkedin.com/company/pageperclick/"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-primary transition-transform
-                         hover:scale-125 hover:-translate-y-1 duration-200"
+              aria-label="LinkedIn"
+              className="hover:text-primary transition-transform hover:scale-125 hover:-translate-y-1 duration-200"
             >
               <Linkedin className="w-5 h-5" />
             </a>
@@ -636,16 +530,14 @@ const Index = () => {
             </p>
             <div className="flex gap-6 justify-center md:justify-end">
               <Link
-                to="/privacy-policy"
-                className="text-muted-foreground hover:text-primary transition-all
-                           ✅ ADDED: inline-block hover:scale-105 hover:-translate-y-0.5"
+                href="/privacy-policy"
+                className="text-muted-foreground hover:text-primary transition-all inline-block hover:scale-105 hover:-translate-y-0.5"
               >
                 Privacy Policy
               </Link>
               <Link
-                to="/terms-and-conditions"
-                className="text-muted-foreground hover:text-primary transition-all
-                           ✅ ADDED: inline-block hover:scale-105 hover:-translate-y-0.5"
+                href="/terms-and-conditions"
+                className="text-muted-foreground hover:text-primary transition-all inline-block hover:scale-105 hover:-translate-y-0.5"
               >
                 Terms & Conditions
               </Link>
@@ -655,6 +547,4 @@ const Index = () => {
       </footer>
     </div>
   );
-};
-
-export default Index;
+}

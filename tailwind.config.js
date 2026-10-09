@@ -1,15 +1,12 @@
-/** @type {import('tailwindcss').Config} */
-const tailwindcssAnimate = require("tailwindcss-animate"); // Use require
+import tailwindcssAnimate from "tailwindcss-animate";
 
-// Use module.exports
-module.exports = {
+/** @type {import('tailwindcss').Config} */
+export default {
   darkMode: ["class"],
   content: [
-    './pages/**/*.{ts,tsx}',
     './components/**/*.{ts,tsx}',
     './app/**/*.{ts,tsx}',
     './src/**/*.{ts,tsx}',
-    './index.html',
   ],
   prefix: "",
   theme: {
@@ -20,15 +17,11 @@ module.exports = {
         "2xl": "1400px",
       },
     },
-    // --- THIS IS THE FIX ---
-    // We move fontFamily OUTSIDE of 'extend' to replace the defaults
     fontFamily: {
-      sans: ["var(--font-sans)"],     // This will be 'Montserrat'
-      heading: ["var(--font-heading)"], // This will be 'Poppins'
+      sans: ["var(--font-sans)"],
+      heading: ["var(--font-heading)"],
     },
-    // --- END FIX ---
     extend: {
-      // All your colors, borders, and animations are correctly in 'extend'
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -69,9 +62,6 @@ module.exports = {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
-      fontFamily: {
-        // We remove 'sans' and 'heading' from here
-      },
       animation: {
         float: 'float 3s ease-in-out infinite',
         gradient: 'gradient 5s ease infinite',
@@ -97,5 +87,4 @@ module.exports = {
   plugins: [
     tailwindcssAnimate
   ],
-}
-
+};

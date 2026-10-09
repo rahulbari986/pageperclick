@@ -1,19 +1,19 @@
-import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
+import type { Metadata } from "next";
+import Link from "next/link";
 
-const PrivacyPolicy = () => {
-  const canonicalUrl = "https://www.pageperclick.com/privacy-policy";
+export const metadata: Metadata = {
+  title: "Privacy Policy | Page Per Click",
+  alternates: {
+    canonical: "https://www.pageperclick.com/privacy-policy",
+  },
+};
 
+export default function PrivacyPolicyPage() {
   return (
     <div className="min-h-screen bg-background">
-      <Helmet>
-        <title>Privacy Policy | Page Per Click</title>
-        <link rel="canonical" href={canonicalUrl} />
-      </Helmet>
-
       <header>
         <div className="container mx-auto px-6 md:px-4 py-5 md:py-10">
-          <Link to="/">
+          <Link href="/">
             <img
               src="/header.png"
               alt="Page Per Click Logo"
@@ -30,7 +30,7 @@ const PrivacyPolicy = () => {
           </span>
         </h1>
         <p className="text-muted-foreground mb-8 text-lg leading-relaxed">
-          Page Per Click ("we," "our," "us") respects your privacy and is
+          Page Per Click (&quot;we,&quot; &quot;our,&quot; &quot;us&quot;) respects your privacy and is
           committed to protecting your personal data. This Privacy Policy
           explains how we collect, use, and safeguard your information when you
           use our website and services.
@@ -145,8 +145,7 @@ const PrivacyPolicy = () => {
             Email:{" "}
             <a
               href="mailto:pageperclick@gmail.com"
-              className="text-primary hover:underline transition-all
-                         inline-block hover:scale-105"
+              className="text-primary hover:underline transition-all inline-block hover:scale-105"
             >
               pageperclick@gmail.com
             </a>
@@ -162,13 +161,13 @@ const PrivacyPolicy = () => {
           </h2>
           <p className="text-muted-foreground mb-4 leading-relaxed">
             We may update this Privacy Policy from time to time. Any changes
-            will be posted on this page with a revised "Effective Date."
+            will be posted on this page with a revised &quot;Effective Date.&quot;
           </p>
         </section>
 
         <footer className="mb-10 mx-6 border-t border-border/50 pt-6">
           <Link
-            to="/"
+            href="/"
             className="text-primary hover:text-secondary transition-all inline-flex items-center gap-2
                        hover:scale-105 hover:-translate-y-0.5 hover:shadow-lg"
           >
@@ -178,6 +177,4 @@ const PrivacyPolicy = () => {
       </main>
     </div>
   );
-};
-
-export default PrivacyPolicy;
+}

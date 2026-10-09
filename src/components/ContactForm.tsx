@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useRef, useEffect } from "react";
 import ReCAPTCHA from "react-google-recaptcha";
 import { Button } from "@/components/ui/button";
@@ -193,7 +195,7 @@ export const ContactForm = () => {
           <div className="grid md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <Label htmlFor="fullName">Full Name *</Label>
-              <Input id="fullName" name="fullName" required placeholder="Your Nmae"
+              <Input id="fullName" name="fullName" required placeholder="Your Name"
                 value={formData.fullName} onChange={handleChange}
                 className={cn(errors.fullName && 'border-red-500')} />
             </div>
@@ -251,7 +253,7 @@ export const ContactForm = () => {
             </Button>
             <ReCAPTCHA
               ref={recaptchaRef}
-              sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
+              sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || process.env.VITE_RECAPTCHA_SITE_KEY || ""}
               theme="dark"
             />
           </div>

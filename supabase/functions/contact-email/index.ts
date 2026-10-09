@@ -252,9 +252,10 @@ serve(async (req: Request) => {
       status: 200,
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     // 10. Catch any unexpected server errors
-    console.error("❌ Unhandled Function Error:", error.message);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("❌ Unhandled Function Error:", errorMessage);
     return new Response(JSON.stringify({ error: "An unexpected server error occurred." }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
