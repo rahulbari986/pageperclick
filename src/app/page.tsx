@@ -362,7 +362,7 @@ export default function Home() {
               <div className="space-y-0">
                 <div>
                   <a
-                    href="tel:+918123459543"
+                    href="tel:+916364738587"
                     className="inline-flex items-center gap-4 py-4 hover:border-primary transition-all group"
                   >
                     <div
@@ -372,7 +372,7 @@ export default function Home() {
                       <Phone className="w-6 h-6 text-white" />
                     </div>
                     <span className="font-semibold text-lg group-hover:text-primary transition-colors">
-                      +91 8123459543
+                      +91 6364738587
                     </span>
                   </a>
                 </div>
