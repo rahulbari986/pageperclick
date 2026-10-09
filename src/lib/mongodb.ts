@@ -52,6 +52,12 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
       serverSelectionTimeoutMS: 5000,
     };
 
+    try {
+      dns.setServers(["8.8.8.8", "1.1.1.1"]);
+    } catch {
+      // Ignore if setServers is restricted in the environment
+    }
+
     cached.promise = mongoose.connect(uri, opts).then((m) => {
       console.log("✅ Successfully connected to MongoDB Atlas.");
       return m;

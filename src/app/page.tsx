@@ -4,21 +4,20 @@ import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { ServiceCard } from "@/components/ServiceCard";
 import { StatCard } from "@/components/StatCard";
-import Facebook from "lucide-react/dist/esm/icons/facebook";
-import Youtube from "lucide-react/dist/esm/icons/youtube";
-import Linkedin from "lucide-react/dist/esm/icons/linkedin";
-import Instagram from "lucide-react/dist/esm/icons/instagram";
-import Share2 from "lucide-react/dist/esm/icons/share-2";
-import TrendingUp from "lucide-react/dist/esm/icons/trending-up";
-import FileText from "lucide-react/dist/esm/icons/file-text";
-import Palette from "lucide-react/dist/esm/icons/palette";
-import Phone from "lucide-react/dist/esm/icons/phone";
-import Mail from "lucide-react/dist/esm/icons/mail";
-import CheckCircle2 from "lucide-react/dist/esm/icons/check-circle-2";
-import Target from "lucide-react/dist/esm/icons/target";
-import Zap from "lucide-react/dist/esm/icons/zap";
-import Rocket from "lucide-react/dist/esm/icons/rocket";
-import MapPin from "lucide-react/dist/esm/icons/map-pin";
+import { Facebook, Youtube, Linkedin, Instagram } from "@/components/icons/SocialIcons";
+import {
+  Share2,
+  TrendingUp,
+  FileText,
+  Palette,
+  Phone,
+  Mail,
+  CheckCircle2,
+  Target,
+  Zap,
+  Rocket,
+  MapPin,
+} from "lucide-react";
 import {
   Accordion,
   AccordionContent,
