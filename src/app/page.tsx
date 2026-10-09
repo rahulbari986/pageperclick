@@ -26,17 +26,14 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import Link from "next/link";
+import ContactFormSkeleton from "@/components/ContactFormSkeleton";
 
-// Dynamic client import for ContactForm
+// Dynamic client import for ContactForm with UX 3.2 Skeleton Screen
 const ContactForm = dynamic(
   () => import("@/components/ContactForm").then((mod) => mod.ContactForm),
   {
     ssr: false,
-    loading: () => (
-      <div className="flex items-center justify-center h-96 text-muted-foreground">
-        Loading form...
-      </div>
-    ),
+    loading: () => <ContactFormSkeleton />,
   }
 );
 
@@ -531,12 +528,14 @@ export default function Home() {
             <div className="flex gap-6 justify-center md:justify-end">
               <Link
                 href="/privacy-policy"
+                prefetch={true}
                 className="text-muted-foreground hover:text-primary transition-all inline-block hover:scale-105 hover:-translate-y-0.5"
               >
                 Privacy Policy
               </Link>
               <Link
                 href="/terms-and-conditions"
+                prefetch={true}
                 className="text-muted-foreground hover:text-primary transition-all inline-block hover:scale-105 hover:-translate-y-0.5"
               >
                 Terms & Conditions

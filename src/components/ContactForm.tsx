@@ -127,42 +127,54 @@ export const ContactForm = () => {
 
     setIsSubmitting(true);
 
-    const finalPhoneNumber = `+91${formData.phone}`;
+    const previousFormData = { ...formData };
     const selectedServiceLabel = services.find(s => s.value === formData.service)?.label || formData.service;
 
+    // 3.1 Optimistic UI update: Immediate positive feedback
+    setFormStatus('SUCCESS');
+
     try {
-      const { data, error } = await supabase.functions.invoke('contact-email', {
-        body: {
-          contactData: {
-            full_name: formData.fullName,
-            email: formData.email,
-            phone: finalPhoneNumber,
-            company_name: formData.company,
-            service: selectedServiceLabel,
-            message: formData.message,
-            // ✅ Include UTM parameters
-            utm_source: utmParams.source || null,
-            utm_medium: utmParams.medium || null,
-            utm_campaign: utmParams.campaign || null,
-          },
+      const response = await fetch("/api/v1/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: formData.fullName,
+          email: formData.email,
+          phone: formData.phone,
+          company: formData.company,
+          service: selectedServiceLabel,
+          message: formData.message,
           recaptchaToken,
-        },
+          utm_source: utmParams.source || null,
+          utm_medium: utmParams.medium || null,
+          utm_campaign: utmParams.campaign || null,
+        }),
       });
 
-      if (error) {
-        const functionErrorBody = await error.context?.json();
-        if (functionErrorBody?.error?.includes("already exists")) {
+      const result = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 409 || result.status === "DUPLICATE") {
           setFormStatus('DUPLICATE');
         } else {
-          throw new Error(functionErrorBody?.error || "An unknown error occurred in the function.");
+          // Revert optimistic UI update on failure (Section 3.1)
+          setFormStatus('FORM');
+          setFormData(previousFormData);
+          throw new Error(result.error || "An unknown error occurred.");
         }
       } else {
-        setFormStatus('SUCCESS');
+        toast({
+          title: "Inquiry Received",
+          description: "We have received your message and will get back to you shortly.",
+        });
       }
 
       recaptchaRef.current?.reset();
     } catch (error: unknown) {
       console.error("Submission error:", error);
+      // Revert to form state on failure (Section 3.1)
+      setFormStatus('FORM');
+      setFormData(previousFormData);
       const message =
         error instanceof Error ? error.message : typeof error === "string" ? error : "An unexpected error occurred. Please try again.";
       toast({
