@@ -11,6 +11,8 @@ export interface IContact extends Document {
   utm_medium?: string | null;
   utm_campaign?: string | null;
   ipAddress?: string;
+  status: "NEW" | "CONTACTED" | "QUALIFIED" | "CONVERTED" | "ARCHIVED";
+  adminNotes?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -75,6 +77,18 @@ const ContactSchema: Schema<IContact> = new Schema(
       type: String,
       trim: true,
       default: null,
+    },
+    status: {
+      type: String,
+      enum: ["NEW", "CONTACTED", "QUALIFIED", "CONVERTED", "ARCHIVED"],
+      default: "NEW",
+      index: true,
+    },
+    adminNotes: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 5000,
     },
   },
   {
