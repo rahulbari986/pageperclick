@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
 
     const totalAll = await Contact.countDocuments({});
 
-    const contacts = rawContacts.map((c: any) => ({
+    const contacts = rawContacts.map((c) => ({
       ...c,
       status: c.status || "NEW",
       adminNotes: c.adminNotes || "",
