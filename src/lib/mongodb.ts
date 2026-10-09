@@ -1,4 +1,12 @@
 import mongoose from "mongoose";
+import dns from "node:dns";
+
+// Ensure robust SRV record resolution across all network providers
+try {
+  dns.setServers(["8.8.8.8", "1.1.1.1"]);
+} catch {
+  // Ignore if restricted
+}
 
 /**
  * MongoDB Atlas Connection Manager
