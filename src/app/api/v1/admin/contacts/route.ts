@@ -26,6 +26,13 @@ export async function GET(req: NextRequest) {
         (filter.$and as Record<string, unknown>[]).push({
           $or: [{ status: "NEW" }, { status: { $exists: false } }, { status: null }],
         });
+      } else if (status === "PENDING") {
+        filter.$and = filter.$and || [];
+        (filter.$and as Record<string, unknown>[]).push({
+          $or: [{ status: "PENDING" }, { status: "QUALIFIED" }],
+        });
+      } else if (status === "CONTACTED") {
+        filter.status = "CONTACTED";
       } else {
         filter.status = status;
       }
@@ -50,25 +57,38 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Parallel execution for data and stats
-    const [rawContacts, total, newCount, contactedCount, qualifiedCount, convertedCount] = await Promise.all([
+    // Parallel execution for data and stats (NEW, PENDING, CONTACTED)
+    const [rawContacts, total, newCount, pendingCount, contactedCount] = await Promise.all([
       Contact.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
       Contact.countDocuments(filter),
       Contact.countDocuments({
         $or: [{ status: "NEW" }, { status: { $exists: false } }, { status: null }],
       }),
+      Contact.countDocuments({
+        $or: [
+          { status: "PENDING" },
+          { status: "QUALIFIED" as unknown as "PENDING" },
+        ],
+      }),
       Contact.countDocuments({ status: "CONTACTED" }),
-      Contact.countDocuments({ status: "QUALIFIED" }),
-      Contact.countDocuments({ status: "CONVERTED" }),
     ]);
 
     const totalAll = await Contact.countDocuments({});
 
-    const contacts = rawContacts.map((c) => ({
-      ...c,
-      status: c.status || "NEW",
-      adminNotes: c.adminNotes || "",
-    }));
+    const contacts = rawContacts.map((c) => {
+      const rawStatus = (c as unknown as Record<string, unknown>).status as string | undefined;
+      let leadStatus: "NEW" | "PENDING" | "CONTACTED" = "NEW";
+      if (rawStatus === "PENDING" || rawStatus === "QUALIFIED") {
+        leadStatus = "PENDING";
+      } else if (rawStatus === "CONTACTED") {
+        leadStatus = "CONTACTED";
+      }
+      return {
+        ...c,
+        status: leadStatus,
+        adminNotes: c.adminNotes || "",
+      };
+    });
 
     return NextResponse.json({
       success: true,
@@ -82,9 +102,8 @@ export async function GET(req: NextRequest) {
       stats: {
         totalAll,
         newCount,
+        pendingCount,
         contactedCount,
-        qualifiedCount,
-        convertedCount,
       },
     });
   } catch (error: unknown) {

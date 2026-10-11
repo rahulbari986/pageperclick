@@ -11,7 +11,7 @@ export interface IContact extends Document {
   utm_medium?: string | null;
   utm_campaign?: string | null;
   ipAddress?: string;
-  status: "NEW" | "CONTACTED" | "QUALIFIED" | "CONVERTED" | "ARCHIVED";
+  status: "NEW" | "PENDING" | "CONTACTED";
   adminNotes?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -80,7 +80,7 @@ const ContactSchema: Schema<IContact> = new Schema(
     },
     status: {
       type: String,
-      enum: ["NEW", "CONTACTED", "QUALIFIED", "CONVERTED", "ARCHIVED"],
+      enum: ["NEW", "PENDING", "CONTACTED", "QUALIFIED", "CONVERTED", "ARCHIVED"],
       default: "NEW",
       index: true,
     },

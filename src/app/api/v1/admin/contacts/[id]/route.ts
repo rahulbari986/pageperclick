@@ -30,9 +30,11 @@ export async function PATCH(
     if (body.service !== undefined) updateFields.service = sanitizeInput(body.service);
     if (body.message !== undefined) updateFields.message = sanitizeInput(body.message);
     if (body.status !== undefined) {
-      const validStatuses = ["NEW", "CONTACTED", "QUALIFIED", "CONVERTED", "ARCHIVED"];
-      if (validStatuses.includes(body.status)) {
-        updateFields.status = body.status;
+      let st = body.status;
+      if (st === "QUALIFIED") st = "PENDING";
+      const validStatuses = ["NEW", "PENDING", "CONTACTED"];
+      if (validStatuses.includes(st)) {
+        updateFields.status = st;
       }
     }
     if (body.adminNotes !== undefined) updateFields.adminNotes = sanitizeInput(body.adminNotes);
