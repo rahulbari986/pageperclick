@@ -88,6 +88,7 @@ import { BulkDeleteBar } from "@/components/admin/BulkDeleteBar";
 import { AdminPasscodeGate } from "@/components/admin/AdminPasscodeGate";
 import { motion } from "framer-motion";
 import { AnimatedCounter } from "@/components/animations/AnimatedCounter";
+import { decodeHtmlEntities } from "@/lib/security";
 
 export interface ContactLead {
   _id: string;
@@ -424,7 +425,15 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
         const data = await res.json();
 
         if (data.success) {
-          setContacts(data.contacts || []);
+          const cleanContacts = (data.contacts || []).map((c: ContactLead) => ({
+            ...c,
+            fullName: decodeHtmlEntities(c.fullName),
+            company: decodeHtmlEntities(c.company || ""),
+            service: decodeHtmlEntities(c.service),
+            message: decodeHtmlEntities(c.message),
+            adminNotes: decodeHtmlEntities(c.adminNotes || ""),
+          }));
+          setContacts(cleanContacts);
           if (data.stats) {
             setStats(data.stats);
           }
@@ -663,8 +672,16 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
 
   // Open Lead Drawer
   const handleOpenDrawer = (lead: ContactLead) => {
-    setSelectedLead(lead);
-    setDrawerNotes(lead.adminNotes || "");
+    const cleanLead: ContactLead = {
+      ...lead,
+      fullName: decodeHtmlEntities(lead.fullName),
+      company: decodeHtmlEntities(lead.company || ""),
+      service: decodeHtmlEntities(lead.service),
+      message: decodeHtmlEntities(lead.message),
+      adminNotes: decodeHtmlEntities(lead.adminNotes || ""),
+    };
+    setSelectedLead(cleanLead);
+    setDrawerNotes(cleanLead.adminNotes || "");
     setIsDrawerOpen(true);
   };
 
@@ -700,13 +717,13 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
   const handleOpenEdit = (lead: ContactLead) => {
     setEditTarget(lead);
     setEditForm({
-      fullName: lead.fullName,
+      fullName: decodeHtmlEntities(lead.fullName),
       email: lead.email,
       phone: lead.phone,
-      company: lead.company || "",
-      service: lead.service,
+      company: decodeHtmlEntities(lead.company || ""),
+      service: decodeHtmlEntities(lead.service),
       status: lead.status,
-      adminNotes: lead.adminNotes || "",
+      adminNotes: decodeHtmlEntities(lead.adminNotes || ""),
     });
     setIsEditDialogOpen(true);
   };
@@ -807,14 +824,14 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
 
     const rows = contacts.map((c) => [
       `"${new Date(c.createdAt).toLocaleString("en-IN")}"`,
-      `"${c.fullName.replace(/"/g, '""')}"`,
-      `"${(c.company || "").replace(/"/g, '""')}"`,
+      `"${decodeHtmlEntities(c.fullName).replace(/"/g, '""')}"`,
+      `"${decodeHtmlEntities(c.company || "").replace(/"/g, '""')}"`,
       `"${c.email.replace(/"/g, '""')}"`,
       `"${c.phone.replace(/"/g, '""')}"`,
-      `"${c.service.replace(/"/g, '""')}"`,
+      `"${decodeHtmlEntities(c.service).replace(/"/g, '""')}"`,
       `"${c.status}"`,
-      `"${(c.adminNotes || "").replace(/"/g, '""')}"`,
-      `"${c.message.replace(/"/g, '""')}"`,
+      `"${decodeHtmlEntities(c.adminNotes || "").replace(/"/g, '""')}"`,
+      `"${decodeHtmlEntities(c.message).replace(/"/g, '""')}"`,
       `"${(c.utm_source || "").replace(/"/g, '""')}"`,
       `"${(c.utm_medium || "").replace(/"/g, '""')}"`,
       `"${(c.utm_campaign || "").replace(/"/g, '""')}"`,
@@ -1451,12 +1468,12 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
                           onClick={() => handleOpenDrawer(lead)}
                         >
                           <div className="font-semibold text-xs text-foreground group-hover:text-primary transition-colors">
-                            {lead.fullName}
+                            {decodeHtmlEntities(lead.fullName)}
                           </div>
                           {lead.company ? (
                             <div className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
                               <Building2 className="w-3 h-3 text-muted-foreground" />
-                              <span>{lead.company}</span>
+                              <span>{decodeHtmlEntities(lead.company)}</span>
                             </div>
                           ) : (
                             <span className="text-[11px] text-muted-foreground">Client</span>
@@ -1519,13 +1536,13 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
                           onClick={() => handleOpenDrawer(lead)}
                         >
                           <div className="font-medium text-xs text-foreground truncate">
-                            {lead.service}
+                            {decodeHtmlEntities(lead.service)}
                           </div>
                           <p
                             className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5"
-                            title={lead.message}
+                            title={decodeHtmlEntities(lead.message)}
                           >
-                            {lead.message || "No message body"}
+                            {decodeHtmlEntities(lead.message) || "No message body"}
                           </p>
                         </div>
                       </TableCell>
@@ -1670,7 +1687,7 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
             {/* Title: Service Name (e.g. Partnership) */}
             <div>
               <ResponsiveModalTitle className="text-xl sm:text-2xl font-extrabold text-foreground font-heading tracking-tight">
-                {selectedLead.service || "Client Enquiry"}
+                {decodeHtmlEntities(selectedLead.service) || "Client Enquiry"}
               </ResponsiveModalTitle>
 
               {/* Timestamp with Calendar Icon */}
@@ -1693,7 +1710,7 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
                   </span>
                   <div className="flex items-center gap-2 mt-1 text-xs sm:text-sm font-bold text-foreground">
                     <User className="w-3.5 h-3.5 text-primary shrink-0" />
-                    <span className="select-text break-words sm:whitespace-nowrap">{selectedLead.fullName}</span>
+                    <span className="select-text break-words sm:whitespace-nowrap">{decodeHtmlEntities(selectedLead.fullName)}</span>
                   </div>
                 </div>
 
@@ -1749,7 +1766,7 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
                     </span>
                     <div className="flex items-center gap-2 mt-1 text-xs sm:text-sm font-bold text-foreground">
                       <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
-                      <span className="select-text break-words sm:whitespace-nowrap">{selectedLead.company}</span>
+                      <span className="select-text break-words sm:whitespace-nowrap">{decodeHtmlEntities(selectedLead.company)}</span>
                     </div>
                   </div>
                 )}
@@ -1762,7 +1779,7 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
                 MESSAGE CONTENT
               </span>
               <div className="border border-border rounded-xl p-3 bg-background/60 text-xs sm:text-sm text-foreground leading-relaxed whitespace-pre-wrap break-words select-text">
-                {selectedLead.message || "No message body provided."}
+                {decodeHtmlEntities(selectedLead.message) || "No message body provided."}
               </div>
             </div>
 
@@ -1773,7 +1790,7 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
                   INTERNAL ADMIN NOTES
                 </span>
                 <div className="p-2.5 rounded-xl bg-background/50 border border-border text-xs text-foreground leading-relaxed whitespace-pre-wrap select-text">
-                  {selectedLead.adminNotes}
+                  {decodeHtmlEntities(selectedLead.adminNotes)}
                 </div>
               </div>
             )}

@@ -4,6 +4,7 @@ import { Contact } from "@/models/Contact";
 import { logger } from "@/lib/logger";
 import { emitContactDeleted } from "@/lib/adminEventBus";
 import { verifyAdminRequest } from "@/lib/adminAuth";
+import { decodeHtmlEntities } from "@/lib/security";
 import mongoose from "mongoose";
 
 export const dynamic = "force-dynamic";
@@ -104,10 +105,37 @@ export async function GET(req: NextRequest) {
       } else if (rawStatus === "CONTACTED") {
         leadStatus = "CONTACTED";
       }
+
+      const decodedService = decodeHtmlEntities(c.service);
+      const decodedFullName = decodeHtmlEntities(c.fullName);
+      const decodedCompany = decodeHtmlEntities(c.company || "");
+      const decodedMessage = decodeHtmlEntities(c.message);
+      const decodedNotes = decodeHtmlEntities(c.adminNotes || "");
+
+      // Self-heal corrupted database records if they contain entity artifacts (&amp;amp;)
+      if (c.service && c.service !== decodedService) {
+        Contact.updateOne(
+          { _id: c._id },
+          {
+            $set: {
+              service: decodedService,
+              fullName: decodedFullName,
+              company: decodedCompany,
+              message: decodedMessage,
+              adminNotes: decodedNotes,
+            },
+          }
+        ).exec().catch(() => {});
+      }
+
       return {
         ...c,
+        fullName: decodedFullName,
+        company: decodedCompany,
+        service: decodedService,
+        message: decodedMessage,
+        adminNotes: decodedNotes,
         status: leadStatus,
-        adminNotes: c.adminNotes || "",
       };
     });
 

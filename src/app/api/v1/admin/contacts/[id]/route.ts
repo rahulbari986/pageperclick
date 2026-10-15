@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { Contact } from "@/models/Contact";
-import { sanitizeInput } from "@/lib/security";
+import { sanitizeInput, decodeHtmlEntities } from "@/lib/security";
 import { logger } from "@/lib/logger";
 import { emitContactUpdated, emitContactDeleted } from "@/lib/adminEventBus";
 import { verifyAdminRequest } from "@/lib/adminAuth";
@@ -64,12 +64,21 @@ export async function PATCH(
       return NextResponse.json({ error: "Contact not found." }, { status: 404 });
     }
 
-    emitContactUpdated(updatedContact as unknown as Record<string, unknown>);
+    const cleanedContact = {
+      ...updatedContact,
+      fullName: decodeHtmlEntities(updatedContact.fullName),
+      company: decodeHtmlEntities(updatedContact.company || ""),
+      service: decodeHtmlEntities(updatedContact.service),
+      message: decodeHtmlEntities(updatedContact.message),
+      adminNotes: decodeHtmlEntities(updatedContact.adminNotes || ""),
+    };
+
+    emitContactUpdated(cleanedContact as unknown as Record<string, unknown>);
     logger.audit("ADMIN_UPDATED_CONTACT", { id, fields: Object.keys(updateFields) });
 
     return NextResponse.json({
       success: true,
-      contact: updatedContact,
+      contact: cleanedContact,
       message: "Contact updated successfully.",
     });
   } catch (error: unknown) {

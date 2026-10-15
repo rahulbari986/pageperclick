@@ -28,24 +28,57 @@ export function validateRole(userRole: string | undefined, allowedRoles: UserRol
 }
 
 /**
- * 2.3 Strict Input Sanitization (XSS & HTML Injection Prevention)
- * Escapes characters that could be interpreted as executable HTML or script tags.
+ * Unescapes HTML entities recursively to restore raw, human-readable text.
+ * Prevents recursive double/triple/quadruple escaping artifacts like &amp;amp;amp;amp;.
+ */
+export function decodeHtmlEntities(input: unknown): string {
+  if (typeof input !== "string") {
+    return "";
+  }
+
+  let result = input;
+  // Maximum 10 passes to unwind nested entity encodings (e.g., &amp;amp;amp;amp;)
+  for (let i = 0; i < 10; i++) {
+    if (!result.includes("&")) break;
+    const prev = result;
+    result = result
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/&quot;/gi, '"')
+      .replace(/&#x27;/gi, "'")
+      .replace(/&#39;/gi, "'")
+      .replace(/&#x2F;/gi, "/")
+      .replace(/&#47;/gi, "/");
+    if (result === prev) break;
+  }
+
+  return result;
+}
+
+/**
+ * 2.3 Strict Input Sanitization (XSS & Script Injection Prevention)
+ * Cleans incoming text without corrupting normal punctuation (&, ', ", /) into HTML entities.
+ * Strips script tags, HTML tags, null bytes, and trims whitespace.
  */
 export function sanitizeInput(input: unknown): string {
   if (typeof input !== "string") {
     return "";
   }
 
-  const map: Record<string, string> = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#x27;",
-    "/": "&#x2F;",
-  };
+  // 1. Unwind any existing double/triple HTML entity encodings
+  let cleaned = decodeHtmlEntities(input.trim());
 
-  return input.trim().replace(/[&<>"'/]/g, (char) => map[char] || char);
+  // 2. Remove null bytes and invisible control characters
+  cleaned = cleaned.replace(/\0/g, "");
+
+  // 3. Strip dangerous script tags and executable HTML blocks
+  cleaned = cleaned
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+    .replace(/<[^>]+>/g, ""); // strip all HTML tags cleanly
+
+  return cleaned.trim();
 }
 
 /**
