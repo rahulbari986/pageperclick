@@ -159,3 +159,13 @@ export function scrubSensitiveData<T>(data: T): T {
 
   return sanitized as T;
 }
+
+/**
+ * 2.7 Regular Expression Metacharacter Sanitization (ReDoS & Injection Prevention)
+ * Escapes characters that have special meaning in regular expressions.
+ * Conforms to CWE-730 and CWE-400.
+ */
+export function escapeRegExp(input: string): string {
+  if (typeof input !== "string") return "";
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}

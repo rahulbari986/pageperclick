@@ -8,6 +8,10 @@ import mongoose from "mongoose";
 
 export const dynamic = "force-dynamic";
 
+function escapeRegExp(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export async function GET(req: NextRequest) {
   const forwardedFor = req.headers.get("x-forwarded-for");
   const ip = forwardedFor ? forwardedFor.split(",")[0].trim() : "127.0.0.1";
@@ -55,16 +59,17 @@ export async function GET(req: NextRequest) {
     }
 
     if (service && service !== "ALL") {
-      filter.service = { $regex: new RegExp(service, "i") };
+      filter.service = { $regex: new RegExp(escapeRegExp(service), "i") };
     }
 
     if (search) {
+      const escapedSearch = escapeRegExp(search);
       const searchOr = [
-        { fullName: { $regex: new RegExp(search, "i") } },
-        { email: { $regex: new RegExp(search, "i") } },
-        { phone: { $regex: new RegExp(search, "i") } },
-        { company: { $regex: new RegExp(search, "i") } },
-        { message: { $regex: new RegExp(search, "i") } },
+        { fullName: { $regex: new RegExp(escapedSearch, "i") } },
+        { email: { $regex: new RegExp(escapedSearch, "i") } },
+        { phone: { $regex: new RegExp(escapedSearch, "i") } },
+        { company: { $regex: new RegExp(escapedSearch, "i") } },
+        { message: { $regex: new RegExp(escapedSearch, "i") } },
       ];
       if (filter.$and) {
         (filter.$and as Record<string, unknown>[]).push({ $or: searchOr });
