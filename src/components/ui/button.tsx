@@ -12,11 +12,11 @@ const buttonVariants = cva(
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 hover:shadow-primary/40",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-        outline: "border-2 border-primary bg-transparent text-primary hover:bg-primary hover:text-primary-foreground backdrop-blur-sm",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 shadow-lg shadow-secondary/20",
-        ghost: "hover:bg-accent/10 hover:text-accent",
+        outline: "border-2 border-primary bg-transparent text-primary hover:bg-primary hover:text-primary-foreground backdrop-blur-sm transition-all duration-300 hover:scale-[1.03] active:scale-95",
+        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 shadow-lg shadow-secondary/20 transition-all duration-300 active:scale-95",
+        ghost: "hover:bg-accent/10 hover:text-accent transition-colors duration-200",
         link: "text-primary underline-offset-4 hover:underline",
-        cta: "bg-gradient-to-r from-primary via-secondary to-accent text-white font-bold shadow-2xl hover:shadow-primary/50 transition-all duration-300 hover:scale-105 hover:brightness-110",
+        cta: "bg-gradient-to-r from-primary via-secondary to-accent text-white font-bold shadow-2xl hover:shadow-primary/50 transition-all duration-300 hover:scale-[1.03] hover:brightness-110 active:scale-95 btn-shimmer",
         glow: "bg-accent text-accent-foreground font-semibold shadow-[0_0_20px_rgba(187,49,255,0.5)] hover:shadow-[0_0_30px_rgba(187,49,255,0.8)] transition-all duration-300",
       },
       size: {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import ReCAPTCHA from "react-google-recaptcha";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,11 @@ import { cn } from "@/lib/utils";
 
 type FormStatus = 'FORM' | 'SUCCESS' | 'DUPLICATE';
 
+const RECAPTCHA_SITE_KEY =
+  process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY ||
+  process.env.VITE_RECAPTCHA_SITE_KEY ||
+  "6Lcui-8rAAAAAPm3F2SJplSNjVY9jvX5dDl64Ipp";
+
 const services = [
   { value: "ppc", label: "PPC Advertising" },
   { value: "content", label: "Content Writing (Blogs & Social Media Posts)" },
@@ -19,8 +24,26 @@ const services = [
   { value: "local", label: "Local SEO (GMB)" },
   { value: "social", label: "Social Media Management" },
   { value: "all", label: "All Services" },
-  
 ];
+
+/**
+ * Memoized ReCAPTCHA wrapper with mobile responsive scaling.
+ * Prevents unnecessary componentDidUpdate / explicitRender cycles on mobile input changes.
+ */
+const MemoizedReCaptcha = React.memo(
+  React.forwardRef<ReCAPTCHA, { sitekey: string; theme?: "dark" | "light" }>(
+    ({ sitekey, theme = "dark" }, ref) => {
+      return (
+        <div className="w-full md:w-auto flex justify-center py-1 overflow-hidden">
+          <div className="transform scale-[0.84] sm:scale-95 md:scale-100 origin-center md:origin-left transition-transform">
+            <ReCAPTCHA ref={ref} sitekey={sitekey} theme={theme} />
+          </div>
+        </div>
+      );
+    }
+  )
+);
+MemoizedReCaptcha.displayName = "MemoizedReCaptcha";
 
 export const ContactForm = () => {
   const { toast } = useToast();
@@ -44,6 +67,25 @@ export const ContactForm = () => {
 
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const recaptchaRef = useRef<ReCAPTCHA>(null);
+  const fullNameRef = useRef<HTMLInputElement>(null);
+
+  // Smooth scroll directly to Full Name (reliable on mobile & desktop)
+  const scrollToFullName = () => {
+    requestAnimationFrame(() => {
+      const el = fullNameRef.current || document.getElementById("fullName");
+      if (!el) return;
+
+      el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+
+      setTimeout(() => {
+        try {
+          el.focus({ preventScroll: true });
+        } catch {
+          el.focus();
+        }
+      }, 300);
+    });
+  };
 
   // ✅ Capture UTMs on component mount
   useEffect(() => {
@@ -121,6 +163,7 @@ export const ContactForm = () => {
           variant: "destructive",
         });
       }
+      scrollToFullName();
       return;
     }
 
@@ -210,45 +253,75 @@ export const ContactForm = () => {
       {formStatus === 'FORM' && (
         <form
           onSubmit={handleSubmit}
-          className="relative space-y-6 bg-card/50 backdrop-blur-xl p-8 md:p-10 rounded-3xl border-2 border-primary/20"
+          className="relative space-y-5 sm:space-y-6 bg-card/50 backdrop-blur-xl p-5 sm:p-8 md:p-10 rounded-2xl sm:rounded-3xl border-2 border-primary/20"
           noValidate
         >
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
             <div className="space-y-2">
               <Label htmlFor="fullName">Full Name *</Label>
-              <Input id="fullName" name="fullName" required placeholder="Your Name"
-                value={formData.fullName} onChange={handleChange}
-                className={cn(errors.fullName && 'border-red-500')} />
+              <Input
+                ref={fullNameRef}
+                id="fullName"
+                name="fullName"
+                autoComplete="name"
+                required
+                placeholder="Your Name"
+                value={formData.fullName}
+                onChange={handleChange}
+                className={cn(errors.fullName && 'border-red-500')}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email *</Label>
-              <Input id="email" name="email" type="email" required placeholder="youremail@example.com"
-                value={formData.email} onChange={handleChange}
-                className={cn(errors.email && 'border-red-500')} />
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                placeholder="youremail@example.com"
+                value={formData.email}
+                onChange={handleChange}
+                className={cn(errors.email && 'border-red-500')}
+              />
             </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
             <div className="space-y-2">
               <Label htmlFor="phone">Phone *</Label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">+91</span>
-                <Input id="phone" name="phone" type="tel" required placeholder=""
-                  value={formData.phone} onChange={handleChange}
-                  className={cn('pl-10', errors.phone && 'border-red-500')} />
+                <Input
+                  id="phone"
+                  name="phone"
+                  type="tel"
+                  autoComplete="tel"
+                  required
+                  placeholder=""
+                  value={formData.phone}
+                  onChange={handleChange}
+                  className={cn('pl-10', errors.phone && 'border-red-500')}
+                />
               </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="company">Company Name</Label>
-              <Input id="company" name="company" placeholder=""
-                value={formData.company} onChange={handleChange} />
+              <Input
+                id="company"
+                name="company"
+                autoComplete="organization"
+                placeholder=""
+                value={formData.company}
+                onChange={handleChange}
+              />
             </div>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="service">Services Interested *</Label>
             <Select name="service" required value={formData.service} onValueChange={handleServiceChange}>
-              <SelectTrigger className={cn(errors.service && 'border-red-500')}>
+              <SelectTrigger id="service" className={cn(errors.service && 'border-red-500')}>
                 <SelectValue placeholder="Select a service" />
               </SelectTrigger>
               <SelectContent>
@@ -272,17 +345,13 @@ export const ContactForm = () => {
             <Button type="submit" variant="cta" size="xl" disabled={isSubmitting} className="w-full md:w-[200px] xl:h-[45px]">
               {isSubmitting ? "Sending..." : "Submit"}
             </Button>
-            <ReCAPTCHA
-              ref={recaptchaRef}
-              sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || process.env.VITE_RECAPTCHA_SITE_KEY || ""}
-              theme="dark"
-            />
+            <MemoizedReCaptcha ref={recaptchaRef} sitekey={RECAPTCHA_SITE_KEY} theme="dark" />
           </div>
         </form>
       )}
 
       {formStatus === 'SUCCESS' && (
-        <div className="relative text-center bg-card/50 backdrop-blur-xl p-8 md:p-10 rounded-3xl border-2 border-primary/20 min-h-[400px] flex flex-col justify-center items-center">
+        <div className="relative text-center bg-card/50 backdrop-blur-xl p-6 sm:p-8 md:p-10 rounded-2xl sm:rounded-3xl border-2 border-primary/20 min-h-[360px] sm:min-h-[400px] flex flex-col justify-center items-center">
           <h2 className="text-2xl font-bold mb-4">Thank You!</h2>
           <p className="text-muted-foreground mb-6">Your form has been submitted successfully. We'll be in touch soon!</p>
           <Button onClick={handleResetForm} variant="outline">Submit Another Response</Button>
@@ -290,7 +359,7 @@ export const ContactForm = () => {
       )}
 
       {formStatus === 'DUPLICATE' && (
-        <div className="relative text-center bg-card/50 backdrop-blur-xl p-8 md:p-10 rounded-3xl border-2 border-yellow-500/50 min-h-[400px] flex flex-col justify-center items-center">
+        <div className="relative text-center bg-card/50 backdrop-blur-xl p-6 sm:p-8 md:p-10 rounded-2xl sm:rounded-3xl border-2 border-yellow-500/50 min-h-[360px] sm:min-h-[400px] flex flex-col justify-center items-center">
           <h2 className="text-2xl font-bold mb-4 text-yellow-400">You've Already Submitted!</h2>
           <p className="text-muted-foreground mb-6">Our records show we've already received your details. We'll be in touch soon!</p>
           <Button onClick={handleResetForm} variant="outline">Use Different Details</Button>

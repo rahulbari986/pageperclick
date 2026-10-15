@@ -2,10 +2,26 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/mongodb";
 import { Contact } from "@/models/Contact";
 import { logger } from "@/lib/logger";
+import { emitContactDeleted } from "@/lib/adminEventBus";
+import { verifyAdminRequest } from "@/lib/adminAuth";
+import mongoose from "mongoose";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  const forwardedFor = req.headers.get("x-forwarded-for");
+  const ip = forwardedFor ? forwardedFor.split(",")[0].trim() : "127.0.0.1";
+
+  // Section 2.1: Enforce administrative authorization
+  const auth = verifyAdminRequest(req);
+  if (!auth.authenticated) {
+    logger.warn("UNAUTHORIZED_ADMIN_READ_ATTEMPT", { url: req.url }, ip);
+    return NextResponse.json(
+      { error: "Unauthorized access. Authentication required." },
+      { status: 401 }
+    );
+  }
+
   try {
     await connectToDatabase();
 
@@ -110,6 +126,58 @@ export async function GET(req: NextRequest) {
     logger.error("ADMIN_GET_CONTACTS_ERROR", error);
     return NextResponse.json(
       { error: "Failed to retrieve contacts from database." },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const forwardedFor = req.headers.get("x-forwarded-for");
+  const ip = forwardedFor ? forwardedFor.split(",")[0].trim() : "127.0.0.1";
+
+  // Section 2.1: Enforce administrative authorization
+  const auth = verifyAdminRequest(req);
+  if (!auth.authenticated) {
+    logger.warn("UNAUTHORIZED_ADMIN_DELETE_ATTEMPT", { url: req.url }, ip);
+    return NextResponse.json(
+      { error: "Unauthorized access. Authentication required." },
+      { status: 401 }
+    );
+  }
+
+  try {
+    await connectToDatabase();
+    const body = await req.json().catch(() => ({}));
+    const { ids } = body;
+
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json(
+        { error: "No contact IDs provided for bulk deletion." },
+        { status: 400 }
+      );
+    }
+
+    const validIds = ids.filter((id: string) => mongoose.Types.ObjectId.isValid(id));
+    if (validIds.length === 0) {
+      return NextResponse.json(
+        { error: "No valid IDs provided for deletion." },
+        { status: 400 }
+      );
+    }
+
+    const result = await Contact.deleteMany({ _id: { $in: validIds } });
+    emitContactDeleted(validIds);
+    logger.audit("ADMIN_BULK_DELETED_CONTACTS", { count: result.deletedCount });
+
+    return NextResponse.json({
+      success: true,
+      deletedCount: result.deletedCount,
+      message: `${result.deletedCount} contacts deleted successfully.`,
+    });
+  } catch (error: unknown) {
+    logger.error("ADMIN_BULK_DELETE_CONTACTS_ERROR", error);
+    return NextResponse.json(
+      { error: "Failed to delete contacts." },
       { status: 500 }
     );
   }

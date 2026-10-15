@@ -2,6 +2,16 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+
+// Lazy-load Three.js canvas to prevent SSR crash
+const ThreeParticleField = dynamic(
+  () =>
+    import("@/components/admin/ThreeParticleField").then(
+      (m) => m.ThreeParticleField
+    ),
+  { ssr: false }
+);
 import { format } from "date-fns";
 import { toast } from "sonner";
 import {
@@ -23,6 +33,13 @@ import {
   X,
   MessageCircle,
   Eye,
+  User,
+  Calendar,
+  Lock,
+  LogOut,
+  CheckCircle2,
+  AlertCircle,
+  Wifi,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -52,18 +69,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  ResponsiveModal,
+  ResponsiveModalTitle,
+  ResponsiveModalDescription,
+} from "@/components/admin/ResponsiveModal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -75,6 +84,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { BulkDeleteBar } from "@/components/admin/BulkDeleteBar";
+import { AdminPasscodeGate } from "@/components/admin/AdminPasscodeGate";
+import { motion } from "framer-motion";
+import { AnimatedCounter } from "@/components/animations/AnimatedCounter";
 
 export interface ContactLead {
   _id: string;
@@ -114,31 +127,226 @@ export const STATUS_CONFIG: Record<
 > = {
   NEW: {
     label: "NEW",
-    badgeBg: "bg-rose-500/10",
-    badgeText: "text-[#e11d48]",
-    badgeBorder: "border-rose-400/40",
-    dotColor: "bg-[#e11d48]",
-    activeMenuBg: "bg-rose-500/10",
+    badgeBg: "bg-white/10",
+    badgeText: "text-white",
+    badgeBorder: "border-white/30",
+    dotColor: "bg-white shadow-[0_0_6px_rgba(255,255,255,0.7)]",
+    activeMenuBg: "bg-white/10",
   },
   PENDING: {
     label: "PENDING",
     badgeBg: "bg-orange-500/10",
     badgeText: "text-[#f97316]",
     badgeBorder: "border-orange-400/40",
-    dotColor: "bg-[#f97316]",
+    dotColor: "bg-[#f97316] shadow-[0_0_6px_rgba(249,115,22,0.7)]",
     activeMenuBg: "bg-orange-500/10",
   },
   CONTACTED: {
     label: "CONTACTED",
-    badgeBg: "bg-slate-500/15",
-    badgeText: "text-[#94a3b8]",
-    badgeBorder: "border-slate-500/30",
-    dotColor: "bg-[#64748b]",
-    activeMenuBg: "bg-slate-500/10",
+    badgeBg: "bg-emerald-500/10",
+    badgeText: "text-emerald-400",
+    badgeBorder: "border-emerald-500/30",
+    dotColor: "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]",
+    activeMenuBg: "bg-emerald-500/10",
   },
 };
 
+/**
+ * Modern crystal harmonic chime for incoming leads (Web Audio API)
+ */
+function playNotificationChime() {
+  try {
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+
+    // Note 1: E5 (659.25Hz)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = "sine";
+    osc1.frequency.setValueAtTime(659.25, now);
+    gain1.gain.setValueAtTime(0.1, now);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.35);
+
+    // Note 2: B5 (987.77Hz)
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = "sine";
+    osc2.frequency.setValueAtTime(987.77, now + 0.12);
+    gain2.gain.setValueAtTime(0.1, now + 0.12);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.12);
+    osc2.stop(now + 0.55);
+  } catch {
+    // Audio context may be restricted before user gesture
+  }
+}
+
 export default function AdminPage() {
+  // Passcode Authentication Gate State (Passcode: 2026)
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+
+  // Real-time Database Status & Live Sync
+  const [dbStatus, setDbStatus] = useState<"connected" | "connecting" | "disconnected">("connecting");
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [newIncomingId, setNewIncomingId] = useState<string | null>(null);
+
+function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
+  const headers: Record<string, string> = { ...extraHeaders };
+  try {
+    const token =
+      sessionStorage.getItem("admin_token") || localStorage.getItem("admin_token");
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+      headers["x-admin-token"] = token;
+    }
+  } catch {
+    // ignore
+  }
+  return headers;
+}
+
+  // Lock Admin Panel & Clear all session state
+  const handleLockAdmin = useCallback(async () => {
+    try {
+      await fetch("/api/v1/admin/auth", {
+        method: "DELETE",
+        headers: getAdminAuthHeaders(),
+      });
+    } catch {
+      // ignore
+    }
+
+    try {
+      sessionStorage.removeItem("admin_token");
+      sessionStorage.removeItem("admin_passcode_auth");
+      sessionStorage.removeItem("admin_username");
+      sessionStorage.removeItem("admin_session_expires_at");
+      sessionStorage.removeItem("admin_session_remember_me");
+      sessionStorage.removeItem("admin_session_ip");
+
+      localStorage.removeItem("admin_token");
+      localStorage.removeItem("admin_passcode_auth");
+      localStorage.removeItem("admin_username");
+      localStorage.removeItem("admin_session_expires_at");
+      localStorage.removeItem("admin_session_remember_me");
+      localStorage.removeItem("admin_session_ip");
+    } catch {
+      // ignore
+    }
+
+    setIsAuthenticated(false);
+    setContacts([]);
+    toast.info("Admin panel locked.");
+  }, []);
+
+  // 1. Initial Authentication & Expiration Check
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function verifyAuth() {
+      // Check if stored expiration timestamp is already in the past
+      const expiresAtStr =
+        sessionStorage.getItem("admin_session_expires_at") ||
+        localStorage.getItem("admin_session_expires_at");
+
+      if (expiresAtStr) {
+        const expiresAt = parseInt(expiresAtStr, 10);
+        if (!isNaN(expiresAt) && Date.now() >= expiresAt) {
+          if (!isCancelled) {
+            handleLockAdmin();
+          }
+          return;
+        }
+      }
+
+      try {
+        const headers = getAdminAuthHeaders();
+        const res = await fetch("/api/v1/admin/auth", { headers });
+        const data = await res.json().catch(() => ({}));
+
+        if (!isCancelled) {
+          if (res.ok && data.authenticated) {
+            // Check if server-side session is expired
+            if (data.expiresAt && Date.now() >= data.expiresAt) {
+              handleLockAdmin();
+              return;
+            }
+            if (data.expiresAt) {
+              sessionStorage.setItem("admin_session_expires_at", data.expiresAt.toString());
+            }
+            setIsAuthenticated(true);
+          } else {
+            // Not authenticated by server — lock panel
+            handleLockAdmin();
+          }
+        }
+      } catch {
+        if (!isCancelled) {
+          // Offline verification with timestamp check
+          if (expiresAtStr) {
+            const expiresAt = parseInt(expiresAtStr, 10);
+            if (!isNaN(expiresAt) && Date.now() >= expiresAt) {
+              setIsAuthenticated(false);
+              return;
+            }
+          }
+          const sessionAuth = sessionStorage.getItem("admin_passcode_auth");
+          const localAuth = localStorage.getItem("admin_passcode_auth");
+          setIsAuthenticated(
+            sessionAuth === "1998" || localAuth === "1998"
+          );
+        }
+      }
+    }
+
+    verifyAuth();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [handleLockAdmin]);
+
+  // 2. Active Session Auto-Lockout Watcher (Locks automatically after 1hr or 12hrs)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const checkLockout = () => {
+      const expiresAtStr =
+        sessionStorage.getItem("admin_session_expires_at") ||
+        localStorage.getItem("admin_session_expires_at");
+
+      if (expiresAtStr) {
+        const expiresAt = parseInt(expiresAtStr, 10);
+        if (!isNaN(expiresAt) && Date.now() >= expiresAt) {
+          const isRememberMe =
+            sessionStorage.getItem("admin_session_remember_me") === "true" ||
+            localStorage.getItem("admin_session_remember_me") === "true";
+
+          toast.error(
+            isRememberMe
+              ? "12-hour session expired. Admin locked automatically."
+              : "1-hour session limit reached. Admin locked automatically."
+          );
+          handleLockAdmin();
+        }
+      }
+    };
+
+    checkLockout();
+    const interval = setInterval(checkLockout, 10000); // Check every 10 seconds
+    return () => clearInterval(interval);
+  }, [isAuthenticated, handleLockAdmin]);
+
   const [contacts, setContacts] = useState<ContactLead[]>([]);
   const [stats, setStats] = useState<StatsData>({
     totalAll: 0,
@@ -148,7 +356,6 @@ export default function AdminPage() {
   });
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [countdown, setCountdown] = useState(10);
 
   // Filter & Search
   const [selectedCardFilter, setSelectedCardFilter] = useState<string>("ALL");
@@ -182,6 +389,7 @@ export default function AdminPage() {
 
   // Selected Row Checkbox state
   const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({});
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   // Copy feedback
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -189,6 +397,7 @@ export default function AdminPage() {
   // Fetch leads from MongoDB Atlas API
   const fetchContacts = useCallback(
     async (showFullLoading = true) => {
+      if (isAuthenticated !== true) return;
       try {
         if (showFullLoading) setLoading(true);
         setIsRefreshing(true);
@@ -203,7 +412,15 @@ export default function AdminPage() {
 
         const res = await fetch(`/api/v1/admin/contacts?${params.toString()}`, {
           cache: "no-store",
+          headers: getAdminAuthHeaders(),
         });
+
+        if (res.status === 401) {
+          setIsAuthenticated(false);
+          toast.error("Session expired. Please sign in again.");
+          return;
+        }
+
         const data = await res.json();
 
         if (data.success) {
@@ -211,46 +428,172 @@ export default function AdminPage() {
           if (data.stats) {
             setStats(data.stats);
           }
+          setDbStatus("connected");
+          setLastSyncTime(new Date());
         } else {
+          setDbStatus("disconnected");
           toast.error(data.error || "Failed to retrieve contacts from database.");
         }
       } catch (err: unknown) {
         console.error(err);
+        setDbStatus("disconnected");
         toast.error("Network error while connecting to database.");
       } finally {
         setLoading(false);
         setIsRefreshing(false);
-        setCountdown(10);
       }
     },
-    [searchTerm, statusFilter]
+    [searchTerm, statusFilter, isAuthenticated]
   );
 
-  // Initial load & search debounce
+  // Initial load and debounced search/filter changes
   useEffect(() => {
+    if (!isAuthenticated) return;
     const timer = setTimeout(() => {
       fetchContacts(false);
-    }, 250);
+    }, 200);
     return () => clearTimeout(timer);
-  }, [fetchContacts]);
+  }, [fetchContacts, isAuthenticated]);
 
+  // Real-time Server-Sent Events (SSE) Stream + Resilient Auto-Sync
   useEffect(() => {
-    fetchContacts(true);
-  }, [fetchContacts]);
+    if (!isAuthenticated) return;
 
-  // Auto-refresh countdown interval (10s)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          fetchContacts(false);
-          return 10;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [fetchContacts]);
+    let eventSource: EventSource | null = null;
+    let reconnectTimer: NodeJS.Timeout | null = null;
+    let isMounted = true;
+
+    const connectStream = () => {
+      try {
+        eventSource = new EventSource("/api/v1/admin/stream");
+
+        eventSource.onopen = () => {
+          if (!isMounted) return;
+          setDbStatus("connected");
+          setLastSyncTime(new Date());
+        };
+
+        // Handshake & Pings
+        eventSource.addEventListener("init", (e) => {
+          if (!isMounted) return;
+          try {
+            const data = JSON.parse(e.data);
+            setDbStatus(data.dbConnected ? "connected" : "disconnected");
+            setLastSyncTime(new Date());
+          } catch {
+            // ignore
+          }
+        });
+
+        eventSource.addEventListener("ping", (e) => {
+          if (!isMounted) return;
+          try {
+            const data = JSON.parse(e.data);
+            setDbStatus(data.dbConnected ? "connected" : "disconnected");
+            setLastSyncTime(new Date());
+          } catch {
+            // ignore
+          }
+        });
+
+        // Instant New Contact Submission Event
+        eventSource.addEventListener("new-contact", (e) => {
+          if (!isMounted) return;
+          try {
+            const newLead = JSON.parse(e.data);
+            playNotificationChime();
+            toast.success(`🚀 New Enquiry: ${newLead.fullName || "New Lead"}`, {
+              description: newLead.service ? `Subject: ${newLead.service}` : undefined,
+              duration: 5000,
+            });
+            if (newLead._id) {
+              setNewIncomingId(newLead._id);
+              setTimeout(() => setNewIncomingId(null), 5000);
+            }
+            // Silent sync to update stats counters and leads in background
+            fetchContacts(false);
+          } catch (err) {
+            console.error("Realtime new contact parse error:", err);
+          }
+        });
+
+        // Contact updated (notes, status, details)
+        eventSource.addEventListener("contact-updated", (e) => {
+          if (!isMounted) return;
+          try {
+            const updated = JSON.parse(e.data);
+            setContacts((prev) =>
+              prev.map((c) => (c._id === updated._id ? { ...c, ...updated } : c))
+            );
+            fetchContacts(false);
+          } catch {
+            // ignore
+          }
+        });
+
+        // Contact deleted
+        eventSource.addEventListener("contact-deleted", (e) => {
+          if (!isMounted) return;
+          try {
+            const { ids } = JSON.parse(e.data);
+            if (Array.isArray(ids)) {
+              setContacts((prev) => prev.filter((c) => !ids.includes(c._id)));
+            }
+            fetchContacts(false);
+          } catch {
+            // ignore
+          }
+        });
+
+        eventSource.onerror = () => {
+          if (!isMounted) return;
+          setDbStatus("connecting");
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+          }
+          // Reconnect with backoff
+          reconnectTimer = setTimeout(connectStream, 4000);
+        };
+      } catch {
+        if (!isMounted) return;
+        setDbStatus("connecting");
+        reconnectTimer = setTimeout(connectStream, 5000);
+      }
+    };
+
+    connectStream();
+
+    // Resilient background auto-poll every 8 seconds (ensures state never gets stale)
+    const pollInterval = setInterval(() => {
+      fetchContacts(false);
+    }, 8000);
+
+    // Auto-refresh when user switches back to the tab
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        fetchContacts(false);
+      }
+    };
+    window.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("focus", handleVisibility);
+
+    return () => {
+      isMounted = false;
+      if (eventSource) eventSource.close();
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      clearInterval(pollInterval);
+      window.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("focus", handleVisibility);
+    };
+  }, [isAuthenticated, fetchContacts]);
+
+  // Manual Refresh Handler
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchContacts(false);
+    toast.success("Client enquiries updated");
+  };
 
   // Card filter synchronization
   const handleCardClick = (cardType: string, filterStatus: string) => {
@@ -293,7 +636,7 @@ export default function AdminPage() {
     try {
       const res = await fetch(`/api/v1/admin/contacts/${leadId}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: getAdminAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ status: newStatus }),
       });
       const data = await res.json();
@@ -332,7 +675,7 @@ export default function AdminPage() {
     try {
       const res = await fetch(`/api/v1/admin/contacts/${selectedLead._id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: getAdminAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ adminNotes: drawerNotes }),
       });
       const data = await res.json();
@@ -377,7 +720,7 @@ export default function AdminPage() {
     try {
       const res = await fetch(`/api/v1/admin/contacts/${editTarget._id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: getAdminAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(editForm),
       });
       const data = await res.json();
@@ -415,6 +758,7 @@ export default function AdminPage() {
     try {
       const res = await fetch(`/api/v1/admin/contacts/${deleteTarget._id}`, {
         method: "DELETE",
+        headers: getAdminAuthHeaders(),
       });
       const data = await res.json();
 
@@ -481,12 +825,12 @@ export default function AdminPage() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `customer_inquiries_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", `client_enquiries_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 
-    toast.success(`Exported ${contacts.length} inquiries as CSV`);
+    toast.success(`Exported ${contacts.length} client enquiries as CSV`);
   };
 
   // Checkbox select all
@@ -494,6 +838,12 @@ export default function AdminPage() {
     if (contacts.length === 0) return false;
     return contacts.every((c) => selectedRows[c._id]);
   }, [contacts, selectedRows]);
+
+  const selectedIds = useMemo(() => {
+    return contacts.filter((c) => selectedRows[c._id]).map((c) => c._id);
+  }, [contacts, selectedRows]);
+
+  const selectedCount = selectedIds.length;
 
   const toggleSelectAll = () => {
     if (isAllSelected) {
@@ -514,243 +864,479 @@ export default function AdminPage() {
     }));
   };
 
+  // Bulk Delete Handler
+  const handleBulkDeleteConfirm = async () => {
+    if (selectedIds.length === 0) return;
+    setIsBulkDeleting(true);
+    try {
+      const res = await fetch("/api/v1/admin/contacts", {
+        method: "DELETE",
+        headers: getAdminAuthHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        toast.success(`Successfully deleted ${data.deletedCount} client enquiries`);
+        setContacts((prev) => prev.filter((c) => !selectedRows[c._id]));
+        setSelectedRows({});
+        fetchContacts(false);
+      } else {
+        toast.error(data.error || "Failed to delete client enquiries");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Network error deleting enquiries");
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  if (isAuthenticated === null) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-3">
+        <div className="w-8 h-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+        <span className="text-xs text-muted-foreground font-mono">Checking security credentials...</span>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <AdminPasscodeGate
+        onSuccess={() => {
+          setIsAuthenticated(true);
+        }}
+      />
+    );
+  }
+
   return (
     <div className="relative min-h-screen bg-background text-foreground font-sans antialiased overflow-x-hidden selection:bg-primary/30 selection:text-white">
-      {/* Ambient Glows matching PagePerClick project */}
-      <div className="inset-0 pointer-events-none fixed overflow-hidden">
-        <div className="absolute top-10 left-10 w-96 h-96 bg-primary/10 rounded-full blur-[130px] animate-float" />
-        <div
-          className="absolute bottom-10 right-10 w-96 h-96 bg-accent/10 rounded-full blur-[140px] animate-float"
-          style={{ animationDelay: "1s" }}
-        />
-        <div
-          className="absolute top-1/2 left-1/3 w-80 h-80 bg-secondary/10 rounded-full blur-[120px] animate-float"
-          style={{ animationDelay: "2s" }}
+      {/* Three.js Particle Field — fullscreen fixed background */}
+      <div className="fixed inset-0 z-0 pointer-events-none opacity-60">
+        <ThreeParticleField
+          className="w-full h-full"
+          particleCount={200}
+          primaryColor="#7c3aed"
+          accentColor="#9333ea"
+          showRing={false}
         />
       </div>
 
-      <div className="relative z-10 max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-7">
-        {/* Top Header with Project Logo and Heading */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-2">
-          <div className="flex items-center gap-4">
-            <Link href="/" className="transition-transform hover:scale-105">
-              <img
+      {/* Ambient Glows */}
+      <div className="inset-0 pointer-events-none fixed overflow-hidden z-[1]">
+        <motion.div
+          animate={{ scale: [1, 1.2, 1], opacity: [0.1, 0.2, 0.1] }}
+          transition={{ repeat: Infinity, duration: 8, ease: "easeInOut" }}
+          className="absolute top-10 left-10 w-96 h-96 bg-primary/12 rounded-full blur-[130px]"
+        />
+        <motion.div
+          animate={{ scale: [1.1, 0.9, 1.1], opacity: [0.08, 0.18, 0.08] }}
+          transition={{ repeat: Infinity, duration: 11, ease: "easeInOut", delay: 1 }}
+          className="absolute bottom-10 right-10 w-96 h-96 bg-accent/12 rounded-full blur-[140px]"
+        />
+        <motion.div
+          animate={{ scale: [0.9, 1.15, 0.9], opacity: [0.06, 0.14, 0.06] }}
+          transition={{ repeat: Infinity, duration: 7, ease: "easeInOut", delay: 2 }}
+          className="absolute top-1/2 left-1/3 w-80 h-80 bg-secondary/10 rounded-full blur-[120px]"
+        />
+      </div>
+
+      {/* Top Header matching exact position and container as entire project */}
+      <header className="relative z-10 w-full">
+        <div className="container mx-auto px-6 md:px-4 py-5 md:py-10 flex items-center justify-between">
+          {/* Left: Clickable Logo with ADMIN WORKSPACE */}
+          <div className="relative w-fit flex flex-col">
+            <Link href="/" className="inline-block cursor-pointer">
+              <motion.img
+                whileHover={{ scale: 1.05 }}
+                transition={{ type: "spring", stiffness: 350, damping: 15 }}
                 src="/header.png"
                 alt="Page Per Click Logo"
-                className="w-28 h-12 md:w-36 md:h-14 object-contain"
+                className="inline-block mt-0 md:mt-4 w-28 h-20 md:w-40 md:h-20 object-contain cursor-pointer"
               />
             </Link>
-            <div className="h-8 w-px bg-border hidden sm:block" />
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight font-heading">
-                Customer Inquiries
-              </h1>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Real-time MongoDB Atlas Leads & Form Entries
-              </p>
+            <span className="text-[10px] sm:text-xs font-semibold text-muted-foreground/80 tracking-widest uppercase mt-0.5 sm:mt-1">
+              ADMIN WORKSPACE
+            </span>
+          </div>
+
+          {/* Right: Sign out Squircle Button */}
+          <div className="flex items-center gap-3">
+            <motion.button
+              whileTap={{ scale: 0.93 }}
+              whileHover={{ scale: 1.04 }}
+              onClick={handleLockAdmin}
+              className="flex flex-col items-center justify-center min-w-[68px] sm:min-w-[76px] h-[54px] sm:h-[60px] px-3.5 py-1 rounded-2xl bg-[#221238]/70 hover:bg-[#2c1748]/90 border border-purple-500/35 hover:border-purple-400/55 text-purple-300 hover:text-purple-100 shadow-md transition-all cursor-pointer group"
+              title="Sign out of Admin Panel"
+              aria-label="Sign out of Admin Panel"
+            >
+              <LogOut className="w-4 h-4 text-purple-300 group-hover:text-purple-100 transition-colors" />
+              <span className="text-[10px] sm:text-xs font-medium text-purple-200 mt-0.5">
+                Sign out
+              </span>
+            </motion.button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Admin Dashboard Body Container */}
+      <div className="relative z-10 container mx-auto px-6 md:px-4 pb-[50vh] space-y-4 sm:space-y-6">
+        {/* Full-width Horizontal Divider */}
+        <div className="w-full h-px bg-white/[0.08]" />
+
+        {/* Second Row: Client Enquiries & Database connected (Left) + Action Squircles (Right) */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
+          className="flex items-center justify-between gap-4"
+        >
+          {/* Left: Client Enquiries Title & Database connected */}
+          <div className="space-y-1">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white tracking-tight font-heading">
+              Client Enquiries
+            </h1>
+            <div className="flex items-center gap-2.5 flex-wrap pt-0.5">
+              <div
+                className={`flex items-center gap-1.5 text-xs sm:text-sm font-medium transition-colors ${
+                  dbStatus === "connected"
+                    ? "text-emerald-400"
+                    : dbStatus === "connecting"
+                    ? "text-amber-400"
+                    : "text-rose-400"
+                }`}
+              >
+                {dbStatus === "connected" ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                ) : dbStatus === "connecting" ? (
+                  <RotateCw className="w-3.5 h-3.5 text-amber-400 animate-spin shrink-0" />
+                ) : (
+                  <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                )}
+
+                <span>
+                  {dbStatus === "connected"
+                    ? "Database connected"
+                    : dbStatus === "connecting"
+                    ? "Connecting to database..."
+                    : "Database disconnected"}
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 self-end sm:self-auto">
-            {/* Live Auto-Refresh Button */}
-            <button
-              onClick={() => fetchContacts(false)}
+          {/* Right: Action Squircles (Refresh & Download) */}
+          <div className="flex items-center gap-2 sm:gap-2.5">
+            {/* Refresh Button */}
+            <motion.button
+              whileTap={{ scale: 0.92 }}
+              whileHover={{ scale: 1.05 }}
+              onClick={handleManualRefresh}
               disabled={isRefreshing}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-card/60 backdrop-blur-md border border-border text-xs font-medium text-foreground hover:border-primary/50 hover:bg-card shadow-sm transition-all active:scale-95"
+              className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#24133b]/60 hover:bg-[#2f184e]/90 border border-purple-500/30 hover:border-purple-400/50 flex items-center justify-center text-purple-300 hover:text-white shadow-sm transition-all cursor-pointer"
+              title="Refresh Client Enquiries"
+              aria-label="Refresh Client Enquiries"
             >
               <RotateCw
-                className={`w-3.5 h-3.5 text-primary ${isRefreshing ? "animate-spin text-accent" : ""}`}
+                className={`w-4 h-4 sm:w-5 sm:h-5 ${isRefreshing ? "animate-spin text-accent" : ""}`}
               />
-              <span>Refresh ({countdown}s)</span>
-            </button>
+            </motion.button>
 
-            {/* Quick Export CSV */}
-            <button
+            {/* Export CSV Button */}
+            <motion.button
+              whileTap={{ scale: 0.92 }}
+              whileHover={{ scale: 1.05 }}
               onClick={handleExportCSV}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-card/60 backdrop-blur-md border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:border-primary/50 hover:bg-card shadow-sm transition-all"
-              title="Download CSV report"
+              className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#132238]/60 hover:bg-[#1a304e]/90 border border-blue-500/30 hover:border-blue-400/50 flex items-center justify-center text-blue-300 hover:text-white shadow-sm transition-all cursor-pointer"
+              title="Export CSV"
+              aria-label="Export CSV"
             >
-              <Download className="w-3.5 h-3.5 text-secondary" />
-              <span className="hidden md:inline">Export</span>
-            </button>
-
-            {/* Back to Live Site */}
-            <Button variant="outline" size="sm" asChild className="h-9 rounded-xl border-primary/50 text-xs text-primary hover:bg-primary hover:text-white">
-              <Link href="/" target="_blank">
-                <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-                <span>Live Site</span>
-              </Link>
-            </Button>
+              <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+            </motion.button>
           </div>
-        </div>
+        </motion.div>
 
-        {/* 4 Metric Cards Row (Matching user's EXACT 3 statuses: NEW, PENDING, CONTACTED) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Card 1: TOTAL INQUIRIES */}
-          <div
+        {/* 4 Metric Cards Row (2x2 grid on mobile, 4 columns on large screens) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+          {/* Card 1: TOTAL CLIENT ENQUIRIES */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
+            whileHover={{ y: -6, scale: 1.02, transition: { duration: 0.2 } }}
+            whileTap={{ scale: 0.97 }}
             onClick={() => handleCardClick("ALL", "ALL")}
-            className={`p-5 rounded-2xl bg-card/65 backdrop-blur-md transition-all cursor-pointer relative group ${
+            className={`p-3.5 sm:p-5 rounded-xl sm:rounded-2xl backdrop-blur-md transition-all duration-300 cursor-pointer relative group overflow-hidden ${
               selectedCardFilter === "ALL"
-                ? "border-2 border-primary shadow-lg shadow-primary/20 bg-card/90"
-                : "border border-border hover:border-primary/50 hover:bg-card/85"
+                ? "border-2 border-primary shadow-[0_0_30px_rgba(147,51,234,0.3)] bg-primary/10"
+                : "border border-border hover:border-primary/60 bg-card/65 hover:bg-card/85 hover:shadow-[0_0_20px_rgba(147,51,234,0.2)]"
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold tracking-wider text-muted-foreground uppercase font-sans">
-                TOTAL INQUIRIES
+            {/* Card shimmer sweep */}
+            <motion.div
+              animate={{ x: ["-100%", "200%"] }}
+              transition={{ repeat: Infinity, duration: 3, ease: "linear", repeatDelay: 2.5 }}
+              className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-primary/10 to-transparent skew-x-12 pointer-events-none z-10"
+            />
+            {/* Glow ring on icon */}
+            {selectedCardFilter === "ALL" && (
+              <motion.div
+                animate={{ scale: [1, 1.3, 1], opacity: [0.4, 0.8, 0.4] }}
+                transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                className="absolute top-3 right-3 w-9 h-9 rounded-full bg-primary/20 blur-md pointer-events-none"
+              />
+            )}
+            <div className="relative z-10 flex items-center justify-between">
+              <span className="text-[10px] sm:text-[11px] font-bold tracking-wider text-muted-foreground uppercase font-sans truncate mr-1">
+                TOTAL ENQUIRIES
               </span>
-              <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary group-hover:scale-105 transition-transform">
-                <Inbox className="w-4 h-4" />
-              </div>
+              <motion.div
+                animate={selectedCardFilter === "ALL" ? { rotate: [0, 360] } : {}}
+                transition={{ repeat: Infinity, duration: 8, ease: "linear" }}
+                className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-primary/10 border border-primary/30 flex items-center justify-center text-primary group-hover:scale-110 transition-transform shrink-0 shadow-[0_0_10px_rgba(147,51,234,0.3)]"
+              >
+                <Inbox className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              </motion.div>
             </div>
-            <div className="mt-3 text-3xl font-extrabold text-foreground tracking-tight font-heading">
-              {stats.totalAll}
+            <div className="relative z-10 mt-2 sm:mt-3 text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight font-heading">
+              <AnimatedCounter value={String(stats.totalAll)} duration={1} />
             </div>
-          </div>
+          </motion.div>
 
-          {/* Card 2: NEW MESSAGES (NEW) */}
-          <div
+          {/* Card 2: NEW MESSAGES */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
+            whileHover={{ y: -6, scale: 1.02, transition: { duration: 0.2 } }}
+            whileTap={{ scale: 0.97 }}
             onClick={() => handleCardClick("NEW", "NEW")}
-            className={`p-5 rounded-2xl bg-card/65 backdrop-blur-md transition-all cursor-pointer relative group ${
+            className={`p-3.5 sm:p-5 rounded-xl sm:rounded-2xl backdrop-blur-md transition-all duration-300 cursor-pointer relative group overflow-hidden ${
               selectedCardFilter === "NEW"
-                ? "border-2 border-[#e11d48] shadow-lg shadow-rose-500/20 bg-card/90"
-                : "border border-border hover:border-[#e11d48]/50 hover:bg-card/85"
+                ? "border-2 border-white shadow-[0_0_30px_rgba(255,255,255,0.15)] bg-white/8"
+                : "border border-border hover:border-white/40 bg-card/65 hover:bg-card/85 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)]"
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold tracking-wider text-muted-foreground uppercase font-sans">
+            <motion.div
+              animate={{ x: ["-100%", "200%"] }}
+              transition={{ repeat: Infinity, duration: 3.5, ease: "linear", repeatDelay: 3 }}
+              className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/8 to-transparent skew-x-12 pointer-events-none z-10"
+            />
+            {selectedCardFilter === "NEW" && (
+              <motion.div
+                animate={{ scale: [1, 1.4, 1], opacity: [0.3, 0.7, 0.3] }}
+                transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+                className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/15 blur-md pointer-events-none"
+              />
+            )}
+            <div className="relative z-10 flex items-center justify-between">
+              <span className="text-[10px] sm:text-[11px] font-bold tracking-wider text-muted-foreground uppercase font-sans truncate mr-1">
                 NEW MESSAGES
               </span>
-              <div className="w-9 h-9 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-[#e11d48] group-hover:scale-105 transition-transform">
-                <Sparkles className="w-4 h-4" />
-              </div>
+              <motion.div
+                animate={selectedCardFilter === "NEW" ? { scale: [1, 1.15, 1] } : {}}
+                transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+                className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-white/10 border border-white/25 flex items-center justify-center text-white group-hover:scale-110 transition-transform shrink-0 shadow-[0_0_10px_rgba(255,255,255,0.2)]"
+              >
+                <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              </motion.div>
             </div>
-            <div className="mt-3 text-3xl font-extrabold text-[#e11d48] tracking-tight font-heading">
-              {stats.newCount}
+            <div className="relative z-10 mt-2 sm:mt-3 text-2xl sm:text-3xl font-extrabold text-white tracking-tight font-heading">
+              <AnimatedCounter value={String(stats.newCount)} duration={1} />
             </div>
-          </div>
+          </motion.div>
 
-          {/* Card 3: PENDING REVIEW (PENDING) */}
-          <div
+          {/* Card 3: PENDING REVIEW */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
+            whileHover={{ y: -6, scale: 1.02, transition: { duration: 0.2 } }}
+            whileTap={{ scale: 0.97 }}
             onClick={() => handleCardClick("PENDING", "PENDING")}
-            className={`p-5 rounded-2xl bg-card/65 backdrop-blur-md transition-all cursor-pointer relative group ${
+            className={`p-3.5 sm:p-5 rounded-xl sm:rounded-2xl backdrop-blur-md transition-all duration-300 cursor-pointer relative group overflow-hidden ${
               selectedCardFilter === "PENDING"
-                ? "border-2 border-[#f97316] shadow-lg shadow-orange-500/20 bg-card/90"
-                : "border border-border hover:border-[#f97316]/50 hover:bg-card/85"
+                ? "border-2 border-[#f97316] shadow-[0_0_30px_rgba(249,115,22,0.3)] bg-orange-500/8"
+                : "border border-border hover:border-[#f97316]/50 bg-card/65 hover:bg-card/85 hover:shadow-[0_0_20px_rgba(249,115,22,0.15)]"
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold tracking-wider text-muted-foreground uppercase font-sans">
+            <motion.div
+              animate={{ x: ["-100%", "200%"] }}
+              transition={{ repeat: Infinity, duration: 3.2, ease: "linear", repeatDelay: 2.8 }}
+              className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-orange-500/10 to-transparent skew-x-12 pointer-events-none z-10"
+            />
+            {selectedCardFilter === "PENDING" && (
+              <motion.div
+                animate={{ scale: [1, 1.3, 1], opacity: [0.4, 0.7, 0.4] }}
+                transition={{ repeat: Infinity, duration: 1.6, ease: "easeInOut" }}
+                className="absolute top-3 right-3 w-9 h-9 rounded-full bg-orange-500/20 blur-md pointer-events-none"
+              />
+            )}
+            <div className="relative z-10 flex items-center justify-between">
+              <span className="text-[10px] sm:text-[11px] font-bold tracking-wider text-muted-foreground uppercase font-sans truncate mr-1">
                 PENDING REVIEW
               </span>
-              <div className="w-9 h-9 rounded-full bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-[#f97316] group-hover:scale-105 transition-transform">
-                <Clock className="w-4 h-4" />
-              </div>
+              <motion.div
+                animate={selectedCardFilter === "PENDING" ? { rotate: [-10, 10, -10] } : {}}
+                transition={{ repeat: Infinity, duration: 0.8, ease: "easeInOut" }}
+                className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-orange-500/10 border border-orange-500/25 flex items-center justify-center text-[#f97316] group-hover:scale-110 transition-transform shrink-0 shadow-[0_0_10px_rgba(249,115,22,0.25)]"
+              >
+                <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              </motion.div>
             </div>
-            <div className="mt-3 text-3xl font-extrabold text-[#f97316] tracking-tight font-heading">
-              {stats.pendingCount}
+            <div className="relative z-10 mt-2 sm:mt-3 text-2xl sm:text-3xl font-extrabold text-[#f97316] tracking-tight font-heading">
+              <AnimatedCounter value={String(stats.pendingCount)} duration={1} />
             </div>
-          </div>
+          </motion.div>
 
-          {/* Card 4: CONTACTED (CONTACTED) */}
-          <div
+          {/* Card 4: CONTACTED */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            whileHover={{ y: -6, scale: 1.02, transition: { duration: 0.2 } }}
+            whileTap={{ scale: 0.97 }}
             onClick={() => handleCardClick("CONTACTED", "CONTACTED")}
-            className={`p-5 rounded-2xl bg-card/65 backdrop-blur-md transition-all cursor-pointer relative group ${
+            className={`p-3.5 sm:p-5 rounded-xl sm:rounded-2xl backdrop-blur-md transition-all duration-300 cursor-pointer relative group overflow-hidden ${
               selectedCardFilter === "CONTACTED"
-                ? "border-2 border-[#64748b] shadow-lg shadow-slate-500/20 bg-card/90"
-                : "border border-border hover:border-[#64748b]/50 hover:bg-card/85"
+                ? "border-2 border-emerald-500 shadow-[0_0_30px_rgba(52,211,153,0.3)] bg-emerald-500/8"
+                : "border border-border hover:border-emerald-500/50 bg-card/65 hover:bg-card/85 hover:shadow-[0_0_20px_rgba(52,211,153,0.15)]"
             }`}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold tracking-wider text-muted-foreground uppercase font-sans">
+            <motion.div
+              animate={{ x: ["-100%", "200%"] }}
+              transition={{ repeat: Infinity, duration: 3.8, ease: "linear", repeatDelay: 3.2 }}
+              className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-emerald-500/10 to-transparent skew-x-12 pointer-events-none z-10"
+            />
+            {selectedCardFilter === "CONTACTED" && (
+              <motion.div
+                animate={{ scale: [1, 1.3, 1], opacity: [0.4, 0.8, 0.4] }}
+                transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut" }}
+                className="absolute top-3 right-3 w-9 h-9 rounded-full bg-emerald-500/20 blur-md pointer-events-none"
+              />
+            )}
+            <div className="relative z-10 flex items-center justify-between">
+              <span className="text-[10px] sm:text-[11px] font-bold tracking-wider text-muted-foreground uppercase font-sans truncate mr-1">
                 CONTACTED
               </span>
-              <div className="w-9 h-9 rounded-full bg-slate-500/10 border border-slate-500/20 flex items-center justify-center text-[#94a3b8] group-hover:scale-105 transition-transform">
-                <Phone className="w-4 h-4" />
-              </div>
+              <motion.div
+                animate={selectedCardFilter === "CONTACTED" ? { scale: [1, 1.2, 1] } : {}}
+                transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+                className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform shrink-0 shadow-[0_0_10px_rgba(52,211,153,0.25)]"
+              >
+                <Phone className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              </motion.div>
             </div>
-            <div className="mt-3 text-3xl font-extrabold text-[#94a3b8] tracking-tight font-heading">
-              {stats.contactedCount}
+            <div className="relative z-10 mt-2 sm:mt-3 text-2xl sm:text-3xl font-extrabold text-emerald-400 tracking-tight font-heading">
+              <AnimatedCounter value={String(stats.contactedCount)} duration={1} />
             </div>
-          </div>
+          </motion.div>
         </div>
 
+
         {/* Filter Tabs & Search Bar Container (Only NEW, PENDING, CONTACTED) */}
-        <div className="p-3 bg-card/65 backdrop-blur-md rounded-2xl border border-border shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          {/* Segmented Filter Pills */}
-          <div className="inline-flex items-center bg-background/80 border border-border/60 p-1 rounded-xl text-xs font-medium self-start md:self-auto overflow-x-auto max-w-full">
-            <button
-              onClick={() => handleTabClick("ALL")}
-              className={`px-3.5 py-1.5 rounded-lg transition-all whitespace-nowrap ${
-                statusFilter === "ALL"
-                  ? "bg-gradient-to-r from-primary to-accent text-white font-semibold shadow-md"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              All ({stats.totalAll})
-            </button>
-            <button
-              onClick={() => handleTabClick("NEW")}
-              className={`px-3.5 py-1.5 rounded-lg transition-all whitespace-nowrap ${
-                statusFilter === "NEW"
-                  ? "bg-gradient-to-r from-primary to-accent text-white font-semibold shadow-md"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              New
-            </button>
-            <button
-              onClick={() => handleTabClick("PENDING")}
-              className={`px-3.5 py-1.5 rounded-lg transition-all whitespace-nowrap ${
-                statusFilter === "PENDING"
-                  ? "bg-gradient-to-r from-primary to-accent text-white font-semibold shadow-md"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Pending
-            </button>
-            <button
-              onClick={() => handleTabClick("CONTACTED")}
-              className={`px-3.5 py-1.5 rounded-lg transition-all whitespace-nowrap ${
-                statusFilter === "CONTACTED"
-                  ? "bg-gradient-to-r from-primary to-accent text-white font-semibold shadow-md"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Contacted
-            </button>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
+          className="p-2.5 sm:p-3 bg-card/65 backdrop-blur-md rounded-2xl border border-border shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3"
+        >
+          {/* Segmented Filter Pills with Smooth Sliding Spring Indicator */}
+          <div className="inline-flex items-center bg-background/80 border border-border/60 p-1 rounded-xl text-xs font-medium w-full md:w-auto overflow-x-auto">
+            {[
+              { id: "ALL", label: `All (${stats.totalAll})` },
+              { id: "NEW", label: "New" },
+              { id: "PENDING", label: "Pending" },
+              { id: "CONTACTED", label: "Contacted" },
+            ].map((tab) => {
+              const isActive = statusFilter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => handleTabClick(tab.id as typeof statusFilter)}
+                  className="relative px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors duration-200 whitespace-nowrap active:scale-95 cursor-pointer flex-1 md:flex-initial text-center"
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="adminFilterTabPill"
+                      className="absolute inset-0 bg-gradient-to-r from-primary to-accent rounded-lg shadow-md shadow-primary/25"
+                      transition={{ type: "spring", stiffness: 450, damping: 30 }}
+                    />
+                  )}
+                  <span
+                    className={`relative z-10 transition-colors ${
+                      isActive ? "text-white font-bold" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {tab.label}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Search Input Bar */}
           <div className="relative w-full md:w-96">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
             <Input
               type="text"
               placeholder="Search by name, email, phone, subject..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-8 h-10 bg-background/70 border-border text-xs text-foreground placeholder:text-muted-foreground rounded-xl focus-visible:ring-1 focus-visible:ring-primary"
+              className="pl-10 pr-8 h-10 bg-background/70 border-border text-xs text-foreground placeholder:text-muted-foreground rounded-xl focus-visible:ring-2 focus-visible:ring-primary/50 transition-all duration-300"
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
-        </div>
+        </motion.div>
 
-        {/* Customer Inquiries Table Container */}
-        <div className="bg-card/65 backdrop-blur-md rounded-2xl border border-border shadow-sm overflow-hidden">
-          <Table>
+        {/* Bulk Delete All Component (Visible when all or multiple items selected) */}
+        <BulkDeleteBar
+          selectedCount={selectedCount}
+          totalCount={contacts.length}
+          isAllSelected={isAllSelected}
+          isDeleting={isBulkDeleting}
+          onClearSelection={() => setSelectedRows({})}
+          onConfirmDelete={handleBulkDeleteConfirm}
+        />
+
+        {/* Client Enquiries Table Container */}
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+          className="bg-card/65 backdrop-blur-md rounded-2xl border border-border shadow-sm overflow-hidden"
+        >
+          {/* Mobile Swipe Cue */}
+          <div className="flex md:hidden items-center justify-between px-3.5 py-2 bg-muted/20 border-b border-border/60 text-[11px] text-muted-foreground">
+            <span className="flex items-center gap-1.5 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              Swipe table horizontally to view all columns
+            </span>
+            <span className="text-[10px] text-primary font-semibold">Scroll →</span>
+          </div>
+
+          <div className="overflow-x-auto w-full">
+            <Table className="min-w-[820px] md:min-w-full">
             <TableHeader className="bg-card/80 border-b border-border">
               <TableRow className="border-border hover:bg-transparent">
                 <TableHead className="w-12 py-3.5 pl-5">
                   <button
                     onClick={toggleSelectAll}
-                    className="w-4 h-4 rounded-full border border-muted-foreground/50 flex items-center justify-center hover:border-primary transition-colors"
+                    className={`w-4 h-4 rounded-full border flex items-center justify-center transition-colors cursor-pointer ${
+                      isAllSelected
+                        ? "border-primary bg-primary/20"
+                        : "border-muted-foreground/50 hover:border-primary"
+                    }`}
+                    title={isAllSelected ? "Deselect All" : "Select All"}
                   >
                     {isAllSelected && <div className="w-2 h-2 rounded-full bg-primary" />}
                   </button>
@@ -827,9 +1413,16 @@ export default function AdminPage() {
                   const isChecked = !!selectedRows[lead._id];
 
                   return (
-                    <TableRow
+                    <motion.tr
                       key={lead._id}
-                      className="group hover:bg-card/90 border-border/60 transition-colors"
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                      className={`group border-b transition-all duration-500 ${
+                        lead._id === newIncomingId
+                          ? "bg-primary/25 border-primary shadow-[0_0_30px_rgba(147,51,234,0.4)] ring-1 ring-primary/60"
+                          : "hover:bg-card/90 border-border/60"
+                      }`}
                     >
                       {/* Checkbox circle */}
                       <TableCell className="py-3.5 pl-5">
@@ -942,11 +1535,11 @@ export default function AdminPage() {
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button
-                              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-all ${statusConf.badgeBg} ${statusConf.badgeText} ${statusConf.badgeBorder} hover:brightness-110 shadow-xs`}
+                              className={`group inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-all ${statusConf.badgeBg} ${statusConf.badgeText} ${statusConf.badgeBorder} hover:brightness-110 shadow-xs cursor-pointer active:scale-95`}
                             >
                               <span className={`w-2 h-2 rounded-full ${statusConf.dotColor}`} />
                               <span className="tracking-wide">{statusConf.label}</span>
-                              <ChevronDown className="w-3 h-3 opacity-70 ml-0.5" />
+                              <ChevronDown className="w-3 h-3 opacity-70 ml-0.5 transition-transform duration-200 group-data-[state=open]:rotate-180" />
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent
@@ -962,14 +1555,14 @@ export default function AdminPage() {
                               onClick={() => handleInlineStatusChange(lead._id, "NEW")}
                               className={`flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors ${
                                 lead.status === "NEW"
-                                  ? "bg-rose-500/10 text-[#e11d48]"
-                                  : "text-foreground hover:bg-muted"
+                                  ? "bg-white/10 text-white"
+                                  : "text-slate-300 hover:text-white hover:bg-white/10"
                               }`}
                             >
-                              <span className="w-2.5 h-2.5 rounded-full bg-[#e11d48]" />
-                              <span>NEW</span>
+                              <span className="w-2.5 h-2.5 rounded-full bg-white shadow-[0_0_6px_rgba(255,255,255,0.7)]" />
+                              <span className="text-white">NEW</span>
                               {lead.status === "NEW" && (
-                                <Check className="w-4 h-4 ml-auto text-[#e11d48]" />
+                                <Check className="w-4 h-4 ml-auto text-white" />
                               )}
                             </DropdownMenuItem>
 
@@ -978,12 +1571,12 @@ export default function AdminPage() {
                               onClick={() => handleInlineStatusChange(lead._id, "PENDING")}
                               className={`flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors ${
                                 lead.status === "PENDING"
-                                  ? "bg-orange-500/10 text-[#f97316]"
-                                  : "text-foreground hover:bg-muted"
+                                  ? "bg-orange-500/15 text-[#f97316]"
+                                  : "text-slate-300 hover:text-[#f97316] hover:bg-orange-500/10"
                               }`}
                             >
-                              <span className="w-2.5 h-2.5 rounded-full bg-[#f97316]" />
-                              <span>PENDING</span>
+                              <span className="w-2.5 h-2.5 rounded-full bg-[#f97316] shadow-[0_0_6px_rgba(249,115,22,0.7)]" />
+                              <span className="text-[#f97316]">PENDING</span>
                               {lead.status === "PENDING" && (
                                 <Check className="w-4 h-4 ml-auto text-[#f97316]" />
                               )}
@@ -994,14 +1587,14 @@ export default function AdminPage() {
                               onClick={() => handleInlineStatusChange(lead._id, "CONTACTED")}
                               className={`flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors ${
                                 lead.status === "CONTACTED"
-                                  ? "bg-slate-500/15 text-[#94a3b8]"
-                                  : "text-foreground hover:bg-muted"
+                                  ? "bg-emerald-500/15 text-emerald-400"
+                                  : "text-slate-300 hover:text-emerald-400 hover:bg-emerald-500/10"
                               }`}
                             >
-                              <span className="w-2.5 h-2.5 rounded-full bg-[#64748b]" />
-                              <span>CONTACTED</span>
+                              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]" />
+                              <span className="text-emerald-400">CONTACTED</span>
                               {lead.status === "CONTACTED" && (
-                                <Check className="w-4 h-4 ml-auto text-[#94a3b8]" />
+                                <Check className="w-4 h-4 ml-auto text-emerald-400" />
                               )}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -1013,7 +1606,7 @@ export default function AdminPage() {
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => handleOpenDrawer(lead)}
-                            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-200 hover:scale-110 active:scale-90 cursor-pointer"
                             title="View Full Details"
                           >
                             <Eye className="w-3.5 h-3.5" />
@@ -1021,8 +1614,8 @@ export default function AdminPage() {
 
                           <button
                             onClick={() => handleOpenEdit(lead)}
-                            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-                            title="Edit Inquiry"
+                            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all duration-200 hover:scale-110 active:scale-90 cursor-pointer"
+                            title="Edit Client Enquiry"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
@@ -1032,361 +1625,369 @@ export default function AdminPage() {
                               setDeleteTarget(lead);
                               setIsDeleteDialogOpen(true);
                             }}
-                            className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-200 hover:scale-110 active:scale-90 cursor-pointer"
                             title="Delete Record"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </TableCell>
-                    </TableRow>
+                    </motion.tr>
                   );
                 })
               )}
             </TableBody>
           </Table>
-        </div>
+          </div>
+        </motion.div>
       </div>
 
-      {/* Slide-Over Drawer: Full Lead Details & Internal Notes */}
-      <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-        <SheetContent className="sm:max-w-md w-full bg-card border-l border-border text-foreground p-0 flex flex-col justify-between overflow-y-auto shadow-2xl">
-          {selectedLead && (
-            <div className="p-6 space-y-6 flex-1">
-              <SheetHeader className="pb-4 border-b border-border">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                      Inquiry Details
-                    </span>
-                    <SheetTitle className="text-xl font-bold text-foreground mt-1 font-heading">
-                      {selectedLead.fullName}
-                    </SheetTitle>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {selectedLead.company || "Individual Inquirer"}
-                    </p>
-                  </div>
-
-                  {/* Status Dropdown in Drawer */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-all ${
-                          STATUS_CONFIG[selectedLead.status]?.badgeBg
-                        } ${STATUS_CONFIG[selectedLead.status]?.badgeText} ${
-                          STATUS_CONFIG[selectedLead.status]?.badgeBorder
-                        }`}
-                      >
-                        <span
-                          className={`w-2 h-2 rounded-full ${
-                            STATUS_CONFIG[selectedLead.status]?.dotColor
-                          }`}
-                        />
-                        <span>{STATUS_CONFIG[selectedLead.status]?.label}</span>
-                        <ChevronDown className="w-3 h-3 opacity-70 ml-0.5" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      className="w-44 bg-card border-border rounded-2xl p-1.5 shadow-2xl text-foreground"
-                    >
-                      <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                        UPDATE STATUS
-                      </div>
-                      {(["NEW", "PENDING", "CONTACTED"] as const).map((key) => {
-                        const conf = STATUS_CONFIG[key];
-                        return (
-                          <DropdownMenuItem
-                            key={key}
-                            onClick={() => handleInlineStatusChange(selectedLead._id, key)}
-                            className={`flex items-center gap-2 px-2.5 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors ${
-                              selectedLead.status === key
-                                ? `${conf.activeMenuBg} ${conf.badgeText}`
-                                : "text-foreground hover:bg-muted"
-                            }`}
-                          >
-                            <span className={`w-2.5 h-2.5 rounded-full ${conf.dotColor}`} />
-                            <span>{conf.label}</span>
-                            {selectedLead.status === key && (
-                              <Check className={`w-4 h-4 ml-auto ${conf.badgeText}`} />
-                            )}
-                          </DropdownMenuItem>
-                        );
-                      })}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-
-                {/* Quick Outreach Actions */}
-                <div className="grid grid-cols-3 gap-2 pt-4">
-                  <a
-                    href={`tel:${selectedLead.phone}`}
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-border text-xs font-medium text-foreground hover:bg-muted/50 transition-colors"
-                  >
-                    <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                    Call
-                  </a>
-                  <a
-                    href={`https://wa.me/${selectedLead.phone.replace(/[^0-9]/g, "")}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-border text-xs font-medium text-foreground hover:bg-muted/50 transition-colors"
-                  >
-                    <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
-                    WhatsApp
-                  </a>
-                  <a
-                    href={`mailto:${selectedLead.email}`}
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-border text-xs font-medium text-foreground hover:bg-muted/50 transition-colors"
-                  >
-                    <Mail className="w-3.5 h-3.5 text-secondary" />
-                    Email
-                  </a>
-                </div>
-              </SheetHeader>
-
-              {/* Contact Information */}
-              <div className="space-y-3">
-                <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                  Contact Information
-                </span>
-                <div className="p-4 rounded-xl bg-background/60 border border-border space-y-2.5 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Email:</span>
-                    <span className="font-medium text-foreground">{selectedLead.email}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Phone:</span>
-                    <span className="font-mono text-foreground">{selectedLead.phone}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Service:</span>
-                    <Badge variant="outline" className="bg-card border-border text-foreground">
-                      {selectedLead.service}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Submitted:</span>
-                    <span className="text-muted-foreground">
-                      {new Date(selectedLead.createdAt).toLocaleString("en-IN")}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Message */}
-              <div className="space-y-2">
-                <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                  Customer Message
-                </span>
-                <div className="p-4 rounded-xl bg-background/60 border border-border text-xs text-foreground leading-relaxed whitespace-pre-wrap">
-                  {selectedLead.message || "No message provided."}
-                </div>
-              </div>
-
-              {/* Internal Notes */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Internal Notes
+      {/* Full Lead Details Pop-up (Opens from bottom on mobile, centered on desktop - Non-scrollable) */}
+      <ResponsiveModal open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+        {selectedLead && (
+          <div className="space-y-3 sm:space-y-3.5">
+            {/* Top Row: Status Badge Pill */}
+            <div className="flex items-center justify-between">
+              <div>
+                {selectedLead.status === "NEW" && (
+                  <span className="inline-block px-3 py-0.5 rounded-full text-xs font-bold bg-white/10 text-white border border-white/30">
+                    NEW
                   </span>
-                  <span className="text-[10px] text-muted-foreground">Team private</span>
+                )}
+                {selectedLead.status === "PENDING" && (
+                  <span className="inline-block px-3 py-0.5 rounded-full text-xs font-bold bg-orange-500/10 text-[#f97316] border border-orange-400/40">
+                    PENDING
+                  </span>
+                )}
+                {selectedLead.status === "CONTACTED" && (
+                  <span className="inline-block px-3 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                    CONTACTED
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Title: Service Name (e.g. Partnership) */}
+            <div>
+              <ResponsiveModalTitle className="text-xl sm:text-2xl font-extrabold text-foreground font-heading tracking-tight">
+                {selectedLead.service || "Client Enquiry"}
+              </ResponsiveModalTitle>
+
+              {/* Timestamp with Calendar Icon */}
+              <ResponsiveModalDescription className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5 font-sans font-medium">
+                <Calendar className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <span>
+                  Received on{" "}
+                  {format(new Date(selectedLead.createdAt), "MMM dd, yyyy 'at' hh:mm a")}
+                </span>
+              </ResponsiveModalDescription>
+            </div>
+
+            {/* Gray Sender Info Card - 2-Column Layout */}
+            <div className="bg-background/50 border border-border rounded-xl p-3 sm:p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2.5 sm:gap-y-3 gap-x-6 sm:gap-x-10">
+                {/* SENDER NAME */}
+                <div>
+                  <span className="text-[10px] font-bold text-muted-foreground tracking-wider uppercase block">
+                    SENDER NAME
+                  </span>
+                  <div className="flex items-center gap-2 mt-1 text-xs sm:text-sm font-bold text-foreground">
+                    <User className="w-3.5 h-3.5 text-primary shrink-0" />
+                    <span className="select-text break-words sm:whitespace-nowrap">{selectedLead.fullName}</span>
+                  </div>
                 </div>
-                <Textarea
-                  rows={4}
-                  value={drawerNotes}
-                  onChange={(e) => setDrawerNotes(e.target.value)}
-                  placeholder="Record client discussions, budget notes, follow-up dates..."
-                  className="bg-background/60 border-border text-xs text-foreground focus-visible:ring-1 focus-visible:ring-primary resize-none"
-                />
-                <div className="flex justify-end">
-                  <Button
-                    size="sm"
-                    variant="cta"
-                    onClick={handleSaveNotes}
-                    disabled={isSavingNotes || drawerNotes === (selectedLead.adminNotes || "")}
-                    className="h-8 text-xs font-medium"
-                  >
-                    {isSavingNotes ? "Saving..." : "Save Note"}
-                  </Button>
+
+                {/* EMAIL ADDRESS */}
+                <div>
+                  <span className="text-[10px] font-bold text-muted-foreground tracking-wider uppercase block">
+                    EMAIL ADDRESS
+                  </span>
+                  <div className="flex items-center gap-2 mt-1 text-xs sm:text-sm font-bold text-foreground">
+                    <Mail className="w-3.5 h-3.5 text-primary shrink-0" />
+                    <span className="select-text break-all sm:break-normal">{selectedLead.email}</span>
+                    <button
+                      onClick={() => handleCopy(selectedLead.email, `pop-email-${selectedLead._id}`, "Email")}
+                      className="text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors p-1 rounded-md shrink-0 inline-flex items-center"
+                      title="Copy Email"
+                    >
+                      {copiedId === `pop-email-${selectedLead._id}` ? (
+                        <Check className="w-3 h-3 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3 h-3" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* PHONE NUMBER */}
+                <div>
+                  <span className="text-[10px] font-bold text-muted-foreground tracking-wider uppercase block">
+                    PHONE NUMBER
+                  </span>
+                  <div className="flex items-center gap-2 mt-1 text-xs sm:text-sm font-bold text-foreground font-mono">
+                    <Phone className="w-3.5 h-3.5 text-primary shrink-0" />
+                    <span className="select-text whitespace-nowrap">{selectedLead.phone}</span>
+                    <button
+                      onClick={() => handleCopy(selectedLead.phone, `pop-phone-${selectedLead._id}`, "Phone")}
+                      className="text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors p-1 rounded-md shrink-0 inline-flex items-center"
+                      title="Copy Phone"
+                    >
+                      {copiedId === `pop-phone-${selectedLead._id}` ? (
+                        <Check className="w-3 h-3 text-emerald-400" />
+                      ) : (
+                        <Copy className="w-3 h-3" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* COMPANY (if present) */}
+                {selectedLead.company && (
+                  <div>
+                    <span className="text-[10px] font-bold text-muted-foreground tracking-wider uppercase block">
+                      COMPANY / ORGANIZATION
+                    </span>
+                    <div className="flex items-center gap-2 mt-1 text-xs sm:text-sm font-bold text-foreground">
+                      <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
+                      <span className="select-text break-words sm:whitespace-nowrap">{selectedLead.company}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* MESSAGE CONTENT */}
+            <div>
+              <span className="text-[10px] font-bold text-muted-foreground tracking-wider uppercase block mb-1">
+                MESSAGE CONTENT
+              </span>
+              <div className="border border-border rounded-xl p-3 bg-background/60 text-xs sm:text-sm text-foreground leading-relaxed whitespace-pre-wrap break-words select-text">
+                {selectedLead.message || "No message body provided."}
+              </div>
+            </div>
+
+            {/* Internal Notes Display (if present) */}
+            {selectedLead.adminNotes && (
+              <div>
+                <span className="text-[10px] font-bold text-muted-foreground tracking-wider uppercase block mb-1">
+                  INTERNAL ADMIN NOTES
+                </span>
+                <div className="p-2.5 rounded-xl bg-background/50 border border-border text-xs text-foreground leading-relaxed whitespace-pre-wrap select-text">
+                  {selectedLead.adminNotes}
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Drawer Footer Actions */}
-          {selectedLead && (
-            <div className="p-4 border-t border-border bg-card flex items-center justify-between">
-              <button
-                onClick={() => {
-                  setDeleteTarget(selectedLead);
-                  setIsDeleteDialogOpen(true);
-                }}
-                className="text-xs text-destructive hover:underline font-medium"
-              >
-                Delete Record
-              </button>
-
-              <Button
-                size="sm"
-                onClick={() => handleOpenEdit(selectedLead)}
-                className="h-8 bg-primary hover:bg-primary/90 text-white text-xs"
-              >
-                <Edit3 className="w-3.5 h-3.5 mr-1.5" />
-                Edit Details
-              </Button>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
-
-      {/* Edit Details Dialog Modal (Only NEW, PENDING, CONTACTED) */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-md bg-card border border-border text-foreground rounded-2xl shadow-2xl">
-          <DialogHeader className="border-b border-border pb-3">
-            <DialogTitle className="text-base font-bold text-foreground flex items-center gap-2 font-heading">
-              <Edit3 className="w-4 h-4 text-primary" />
-              Edit Customer Inquiry
-            </DialogTitle>
-          </DialogHeader>
-
-          <form onSubmit={handleSaveEditSubmit} className="space-y-3.5 pt-2">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="edit-name" className="text-xs text-muted-foreground">
-                  Full Name
-                </Label>
-                <Input
-                  id="edit-name"
-                  value={editForm.fullName}
-                  onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })}
-                  required
-                  className="h-9 bg-background/70 border-border text-xs text-foreground focus:border-primary"
-                />
+            {/* Bottom Footer Actions */}
+            <div className="border-t border-border pt-3 sm:pt-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4">
+              {/* Left: Change status pills */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] font-medium text-muted-foreground mr-0.5">
+                  Change status:
+                </span>
+                {(["NEW", "PENDING", "CONTACTED"] as const).map((st) => {
+                  const isCurrent = selectedLead.status === st;
+                  return (
+                    <button
+                      key={st}
+                      onClick={() => handleInlineStatusChange(selectedLead._id, st)}
+                      className={`px-2.5 py-0.5 rounded-full text-xs transition-all cursor-pointer ${
+                        isCurrent
+                          ? "bg-primary text-white font-bold shadow-xs"
+                          : "bg-muted text-muted-foreground hover:bg-muted/80 font-medium"
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  );
+                })}
               </div>
 
-              <div className="space-y-1">
-                <Label htmlFor="edit-email" className="text-xs text-muted-foreground">
-                  Email
-                </Label>
-                <Input
-                  id="edit-email"
-                  type="email"
-                  value={editForm.email}
-                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                  required
-                  className="h-9 bg-background/70 border-border text-xs text-foreground focus:border-primary"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="edit-phone" className="text-xs text-muted-foreground">
-                  Phone
-                </Label>
-                <Input
-                  id="edit-phone"
-                  value={editForm.phone}
-                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                  required
-                  className="h-9 bg-background/70 border-border text-xs text-foreground font-mono focus:border-primary"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="edit-company" className="text-xs text-muted-foreground">
-                  Company
-                </Label>
-                <Input
-                  id="edit-company"
-                  value={editForm.company}
-                  onChange={(e) => setEditForm({ ...editForm, company: e.target.value })}
-                  placeholder="Optional"
-                  className="h-9 bg-background/70 border-border text-xs text-foreground focus:border-primary"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="edit-service" className="text-xs text-muted-foreground">
-                  Subject / Service
-                </Label>
-                <Input
-                  id="edit-service"
-                  value={editForm.service}
-                  onChange={(e) => setEditForm({ ...editForm, service: e.target.value })}
-                  required
-                  className="h-9 bg-background/70 border-border text-xs text-foreground focus:border-primary"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="edit-status" className="text-xs text-muted-foreground">
-                  Status
-                </Label>
-                <Select
-                  value={editForm.status}
-                  onValueChange={(val: "NEW" | "PENDING" | "CONTACTED") =>
-                    setEditForm({ ...editForm, status: val })
-                  }
+              {/* Right: Edit & Close Buttons */}
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  onClick={() => {
+                    const target = selectedLead;
+                    setIsDrawerOpen(false);
+                    setTimeout(() => {
+                      if (target) handleOpenEdit(target);
+                    }, 120);
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-border bg-card text-xs font-semibold text-foreground hover:bg-muted transition-all active:scale-95 cursor-pointer shadow-xs flex-1 sm:flex-initial"
                 >
-                  <SelectTrigger id="edit-status" className="h-9 bg-background/70 border-border text-xs">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-card border-border text-xs text-foreground">
-                    <SelectItem value="NEW" className="text-[#e11d48] font-bold">
-                      NEW
-                    </SelectItem>
-                    <SelectItem value="PENDING" className="text-[#f97316] font-bold">
-                      PENDING
-                    </SelectItem>
-                    <SelectItem value="CONTACTED" className="text-[#94a3b8] font-bold">
-                      CONTACTED
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                  <Edit3 className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span>Edit</span>
+                </button>
+
+                <button
+                  onClick={() => setIsDrawerOpen(false)}
+                  className="px-4 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-xs font-semibold text-white transition-all active:scale-95 cursor-pointer shadow-xs flex-1 sm:flex-initial text-center"
+                >
+                  Close
+                </button>
               </div>
             </div>
+          </div>
+        )}
+      </ResponsiveModal>
 
+      {/* Edit Details Pop-up (Opens from bottom on mobile, centered on desktop - Non-scrollable) */}
+      <ResponsiveModal open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <div className="border-b border-border pb-2.5">
+          <ResponsiveModalTitle className="text-xl sm:text-2xl font-extrabold text-foreground font-heading tracking-tight flex items-center gap-2">
+            <Edit3 className="w-4 h-4 sm:w-5 sm:h-5 text-primary shrink-0" />
+            <span>Edit Client Enquiry</span>
+          </ResponsiveModalTitle>
+          <ResponsiveModalDescription className="text-xs text-muted-foreground mt-0.5">
+            Update client enquiry details, service classification, status, and internal team notes.
+          </ResponsiveModalDescription>
+        </div>
+
+        <form onSubmit={handleSaveEditSubmit} className="space-y-2.5 sm:space-y-3 pt-2.5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
             <div className="space-y-1">
-              <Label htmlFor="edit-notes" className="text-xs text-muted-foreground">
-                Internal Admin Notes
+              <Label htmlFor="edit-name" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                Full Name
               </Label>
-              <Textarea
-                id="edit-notes"
-                rows={3}
-                placeholder="Record notes..."
-                value={editForm.adminNotes}
-                onChange={(e) => setEditForm({ ...editForm, adminNotes: e.target.value })}
-                className="bg-background/70 border-border text-xs text-foreground focus:border-primary resize-none"
+              <Input
+                id="edit-name"
+                autoComplete="name"
+                value={editForm.fullName}
+                onChange={(e) => setEditForm({ ...editForm, fullName: e.target.value })}
+                required
+                className="h-9 bg-background/70 border-border text-foreground rounded-xl px-3 text-xs sm:text-sm focus:border-primary"
               />
             </div>
 
-            <DialogFooter className="pt-3 border-t border-border flex items-center justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setIsEditDialogOpen(false)}
-                className="h-8 border-border bg-card hover:bg-muted text-xs text-muted-foreground"
+            <div className="space-y-1">
+              <Label htmlFor="edit-email" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                Email Address
+              </Label>
+              <Input
+                id="edit-email"
+                type="email"
+                autoComplete="email"
+                value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                required
+                className="h-9 bg-background/70 border-border text-foreground rounded-xl px-3 text-xs sm:text-sm focus:border-primary"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="edit-phone" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                Phone Number
+              </Label>
+              <Input
+                id="edit-phone"
+                autoComplete="tel"
+                value={editForm.phone}
+                onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                required
+                className="h-9 bg-background/70 border-border text-foreground font-mono rounded-xl px-3 text-xs sm:text-sm focus:border-primary"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="edit-company" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                Company / Organization
+              </Label>
+              <Input
+                id="edit-company"
+                autoComplete="organization"
+                value={editForm.company}
+                onChange={(e) => setEditForm({ ...editForm, company: e.target.value })}
+                placeholder="Optional company name"
+                className="h-9 bg-background/70 border-border text-foreground rounded-xl px-3 text-xs sm:text-sm focus:border-primary"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="edit-service" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                Subject / Service
+              </Label>
+              <Input
+                id="edit-service"
+                value={editForm.service}
+                onChange={(e) => setEditForm({ ...editForm, service: e.target.value })}
+                required
+                className="h-9 bg-background/70 border-border text-foreground rounded-xl px-3 text-xs sm:text-sm focus:border-primary"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="edit-status" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                Current Status
+              </Label>
+              <Select
+                value={editForm.status}
+                onValueChange={(val: "NEW" | "PENDING" | "CONTACTED") =>
+                  setEditForm({ ...editForm, status: val })
+                }
               >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                variant="cta"
-                size="sm"
-                disabled={isSavingEdit}
-                className="h-8 text-xs font-semibold"
-              >
-                {isSavingEdit ? "Saving..." : "Save Changes"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+                <SelectTrigger id="edit-status" className="h-9 bg-background/70 border-border text-foreground rounded-xl px-3 text-xs sm:text-sm focus:border-primary">
+                  <SelectValue placeholder="Select Status" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border text-xs sm:text-sm text-foreground rounded-xl shadow-xl">
+                  <SelectItem value="NEW" className="font-bold text-white cursor-pointer">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-white" />
+                      <span>NEW</span>
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="PENDING" className="font-bold text-[#f97316] cursor-pointer">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-[#f97316]" />
+                      <span>PENDING</span>
+                    </span>
+                  </SelectItem>
+                  <SelectItem value="CONTACTED" className="font-bold text-emerald-400 cursor-pointer">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                      <span>CONTACTED</span>
+                    </span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <Label htmlFor="edit-notes" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+              Internal Admin Notes
+            </Label>
+            <Textarea
+              id="edit-notes"
+              rows={2}
+              placeholder="Record client discussions, budget notes, follow-up dates..."
+              value={editForm.adminNotes}
+              onChange={(e) => setEditForm({ ...editForm, adminNotes: e.target.value })}
+              className="bg-background/60 border-border text-foreground rounded-xl p-2.5 text-xs sm:text-sm focus:border-primary resize-none leading-relaxed"
+            />
+          </div>
+
+          <div className="pt-2.5 border-t border-border flex items-center justify-end gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => setIsEditDialogOpen(false)}
+              className="px-3.5 sm:px-4 py-1.5 rounded-xl border border-border bg-card text-xs font-semibold text-muted-foreground hover:bg-muted transition-all active:scale-95 cursor-pointer flex-1 sm:flex-initial text-center"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSavingEdit}
+              className="px-4 sm:px-5 py-1.5 rounded-xl bg-primary hover:bg-primary/90 text-xs font-semibold text-white transition-all active:scale-95 cursor-pointer shadow-xs disabled:opacity-50 flex-1 sm:flex-initial text-center"
+            >
+              {isSavingEdit ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
+        </form>
+      </ResponsiveModal>
 
       {/* Delete Confirmation Alert Dialog */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>

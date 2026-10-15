@@ -3,6 +3,8 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { Contact } from "@/models/Contact";
 import { sanitizeInput } from "@/lib/security";
 import { logger } from "@/lib/logger";
+import { emitContactUpdated, emitContactDeleted } from "@/lib/adminEventBus";
+import { verifyAdminRequest } from "@/lib/adminAuth";
 import mongoose from "mongoose";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +13,19 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const forwardedFor = req.headers.get("x-forwarded-for");
+  const ip = forwardedFor ? forwardedFor.split(",")[0].trim() : "127.0.0.1";
+
+  // Section 2.1: Enforce administrative authorization
+  const auth = verifyAdminRequest(req);
+  if (!auth.authenticated) {
+    logger.warn("UNAUTHORIZED_ADMIN_UPDATE_ATTEMPT", { url: req.url }, ip);
+    return NextResponse.json(
+      { error: "Unauthorized access. Authentication required." },
+      { status: 401 }
+    );
+  }
+
   try {
     const { id } = await params;
 
@@ -49,6 +64,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Contact not found." }, { status: 404 });
     }
 
+    emitContactUpdated(updatedContact as unknown as Record<string, unknown>);
     logger.audit("ADMIN_UPDATED_CONTACT", { id, fields: Object.keys(updateFields) });
 
     return NextResponse.json({
@@ -69,6 +85,19 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const forwardedFor = req.headers.get("x-forwarded-for");
+  const ip = forwardedFor ? forwardedFor.split(",")[0].trim() : "127.0.0.1";
+
+  // Section 2.1: Enforce administrative authorization
+  const auth = verifyAdminRequest(req);
+  if (!auth.authenticated) {
+    logger.warn("UNAUTHORIZED_ADMIN_DELETE_ATTEMPT", { url: req.url }, ip);
+    return NextResponse.json(
+      { error: "Unauthorized access. Authentication required." },
+      { status: 401 }
+    );
+  }
+
   try {
     const { id } = await params;
 
@@ -84,6 +113,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Contact not found." }, { status: 404 });
     }
 
+    emitContactDeleted([id]);
     logger.audit("ADMIN_DELETED_CONTACT", { id });
 
     return NextResponse.json({

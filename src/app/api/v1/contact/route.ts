@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger";
 import { CircuitBreaker } from "@/lib/circuitBreaker";
 import { connectToDatabase } from "@/lib/mongodb";
 import { Contact } from "@/models/Contact";
+import { emitNewContact } from "@/lib/adminEventBus";
 
 // Circuit breakers for external integrations
 const recaptchaBreaker = new CircuitBreaker("GoogleReCAPTCHA", { failureThreshold: 3, recoveryTimeout: 20000 });
@@ -113,7 +114,7 @@ export async function POST(req: NextRequest) {
 
     // 5. Connect to MongoDB Atlas & Persist Lead (Protected by Circuit Breaker)
     try {
-      await mongoBreaker.execute(async () => {
+      const createdContact = await mongoBreaker.execute(async () => {
         await connectToDatabase();
 
         // Check for duplicate entries
@@ -143,6 +144,13 @@ export async function POST(req: NextRequest) {
           ipAddress: ip,
         });
       });
+
+      if (createdContact) {
+        const doc = (createdContact as unknown as { toObject?: () => Record<string, unknown> }).toObject
+          ? (createdContact as unknown as { toObject: () => Record<string, unknown> }).toObject()
+          : (createdContact as unknown as Record<string, unknown>);
+        emitNewContact(doc);
+      }
     } catch (dbError: unknown) {
       if (typeof dbError === "object" && dbError !== null && "status" in dbError && (dbError as DuplicateError).status === 409) {
         return NextResponse.json(
