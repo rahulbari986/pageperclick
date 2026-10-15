@@ -9,8 +9,11 @@ import crypto from "node:crypto";
 
 const SECRET_KEY =
   process.env.ADMIN_SESSION_SECRET ||
-  process.env.MONGODB_URI?.slice(0, 32) ||
-  "pageperclick-enterprise-admin-secret-2026-strict";
+  (process.env.NODE_ENV === "production"
+    ? (() => {
+        throw new Error("ADMIN_SESSION_SECRET must be set in environment variables.");
+      })()
+    : "local-dev-admin-session-secret-change-in-production");
 
 const COOKIE_NAME = "ppc_admin_session";
 
@@ -217,6 +220,6 @@ export function verifyAdminRequest(req: NextRequest): {
 
 export const ADMIN_COOKIE_NAME = COOKIE_NAME;
 export const ADMIN_CREDENTIALS = {
-  USERNAME: process.env.ADMIN_USERNAME || "pageperclick",
-  PASSWORD: process.env.ADMIN_PASSWORD || "1998",
+  USERNAME: process.env.ADMIN_USERNAME || "",
+  PASSWORD: process.env.ADMIN_PASSWORD || "",
 };

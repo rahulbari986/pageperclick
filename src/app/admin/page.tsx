@@ -192,7 +192,7 @@ function playNotificationChime() {
 }
 
 export default function AdminPage() {
-  // Passcode Authentication Gate State (Passcode: 2026)
+  // Admin Authentication Gate State
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   // Real-time Database Status & Live Sync
@@ -303,7 +303,7 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
           const sessionAuth = sessionStorage.getItem("admin_passcode_auth");
           const localAuth = localStorage.getItem("admin_passcode_auth");
           setIsAuthenticated(
-            sessionAuth === "1998" || localAuth === "1998"
+            sessionAuth === "authenticated" || localAuth === "authenticated" || sessionAuth === "1998" || localAuth === "1998"
           );
         }
       }

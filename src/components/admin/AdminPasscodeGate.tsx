@@ -77,7 +77,7 @@ export function AdminPasscodeGate({ onSuccess }: AdminPasscodeGateProps) {
           if (data.token) {
             sessionStorage.setItem("admin_token", data.token);
           }
-          sessionStorage.setItem("admin_passcode_auth", "1998");
+          sessionStorage.setItem("admin_passcode_auth", "authenticated");
           sessionStorage.setItem("admin_username", trimmedUser);
           sessionStorage.setItem("admin_session_expires_at", expiresAt.toString());
           sessionStorage.setItem("admin_session_remember_me", rememberMe ? "true" : "false");
@@ -85,7 +85,7 @@ export function AdminPasscodeGate({ onSuccess }: AdminPasscodeGateProps) {
 
           if (rememberMe) {
             if (data.token) localStorage.setItem("admin_token", data.token);
-            localStorage.setItem("admin_passcode_auth", "1998");
+            localStorage.setItem("admin_passcode_auth", "authenticated");
             localStorage.setItem("admin_username", trimmedUser);
             localStorage.setItem("admin_session_expires_at", expiresAt.toString());
             localStorage.setItem("admin_session_remember_me", "true");
