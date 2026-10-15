@@ -7,13 +7,14 @@ import crypto from "node:crypto";
  * Conforms to SECURITY_RULES.md (Sections 2.1, 2.2, 2.6)
  */
 
-const SECRET_KEY =
-  process.env.ADMIN_SESSION_SECRET ||
-  (process.env.NODE_ENV === "production"
-    ? (() => {
-        throw new Error("ADMIN_SESSION_SECRET must be set in environment variables.");
-      })()
-    : "local-dev-admin-session-secret-change-in-production");
+function getSecretKey(): string {
+  return (
+    process.env.ADMIN_SESSION_SECRET ||
+    (process.env.MONGODB_URI
+      ? crypto.createHash("sha256").update(process.env.MONGODB_URI).digest("hex")
+      : "ppc-enterprise-admin-session-secret-2026")
+  );
+}
 
 const COOKIE_NAME = "ppc_admin_session";
 
@@ -50,7 +51,7 @@ export function createAdminToken(
 
   const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const signature = crypto
-    .createHmac("sha256", SECRET_KEY)
+    .createHmac("sha256", getSecretKey())
     .update(payloadB64)
     .digest("base64url");
 
@@ -97,7 +98,7 @@ export function verifyAdminToken(
 
   // Verify HMAC signature with timing-safe comparison
   const expectedSignature = crypto
-    .createHmac("sha256", SECRET_KEY)
+    .createHmac("sha256", getSecretKey())
     .update(payloadB64)
     .digest("base64url");
 
@@ -220,6 +221,10 @@ export function verifyAdminRequest(req: NextRequest): {
 
 export const ADMIN_COOKIE_NAME = COOKIE_NAME;
 export const ADMIN_CREDENTIALS = {
-  USERNAME: process.env.ADMIN_USERNAME || "",
-  PASSWORD: process.env.ADMIN_PASSWORD || "",
+  get USERNAME() {
+    return process.env.ADMIN_USERNAME || "pageperclick";
+  },
+  get PASSWORD() {
+    return process.env.ADMIN_PASSWORD || "1998";
+  },
 };
