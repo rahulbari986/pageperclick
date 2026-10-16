@@ -161,14 +161,14 @@ export async function POST(req: NextRequest) {
       throw dbError;
     }
 
-    // 6. Optional Email Notification via Resend (if RESEND_API_KEY is configured)
+    // 6. Real-Time Email Notification via Resend (Section 2.6)
     const resendApiKey = process.env.RESEND_API_KEY;
     if (resendApiKey) {
       try {
         const sendTo = process.env.SEND_TO_EMAIL || "pageperclick@gmail.com";
         const sendFrom = process.env.SEND_FROM_EMAIL || "noreply@pageperclick.com";
 
-        await fetch("https://api.resend.com/emails", {
+        const resendRes = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -177,20 +177,68 @@ export async function POST(req: NextRequest) {
           body: JSON.stringify({
             from: sendFrom,
             to: sendTo,
-            subject: `🚀 New Contact Lead: ${sanitizedFullName}`,
+            subject: `🚀 New Lead: ${sanitizedFullName} - ${sanitizedService}`,
             html: `
-              <h2>New Website Lead</h2>
-              <p><b>Name:</b> ${sanitizedFullName}</p>
-              <p><b>Email:</b> ${sanitizedEmail}</p>
-              <p><b>Phone:</b> ${formattedPhone}</p>
-              <p><b>Service:</b> ${sanitizedService}</p>
-              <p><b>Company:</b> ${sanitizedCompany || "N/A"}</p>
-              <p><b>Message:</b> ${sanitizedMessage}</p>
-              <hr/>
-              <p><small>Source: ${validData.utm_source || "Direct"} | Medium: ${validData.utm_medium || "None"}</small></p>
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0b0f17; color: #f1f5f9; border: 1px solid #1e293b; border-radius: 16px; overflow: hidden; padding: 32px 28px;">
+                <div style="border-bottom: 1px solid #1e293b; padding-bottom: 18px; margin-bottom: 22px;">
+                  <h1 style="font-size: 20px; font-weight: 800; color: #ffffff; margin: 0; letter-spacing: -0.5px;">
+                    🚀 New Client Enquiry Received
+                  </h1>
+                  <p style="font-size: 13px; color: #94a3b8; margin: 4px 0 0 0;">
+                    PagePerClick Leads System
+                  </p>
+                </div>
+
+                <div style="background-color: #131b2e; border: 1px solid #1e293b; border-radius: 12px; padding: 18px; margin-bottom: 20px;">
+                  <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                    <tr>
+                      <td style="padding: 7px 0; color: #94a3b8; width: 140px; font-weight: 600;">Sender Name:</td>
+                      <td style="padding: 7px 0; color: #f8fafc; font-weight: 700;">${sanitizedFullName}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 7px 0; color: #94a3b8; font-weight: 600;">Email Address:</td>
+                      <td style="padding: 7px 0;"><a href="mailto:${sanitizedEmail}" style="color: #60a5fa; text-decoration: none; font-weight: 600;">${sanitizedEmail}</a></td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 7px 0; color: #94a3b8; font-weight: 600;">Phone Number:</td>
+                      <td style="padding: 7px 0;"><a href="tel:${formattedPhone}" style="color: #60a5fa; text-decoration: none; font-weight: 600;">${formattedPhone}</a></td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 7px 0; color: #94a3b8; font-weight: 600;">Subject / Service:</td>
+                      <td style="padding: 7px 0; color: #38bdf8; font-weight: 700;">${sanitizedService}</td>
+                    </tr>
+                    ${sanitizedCompany ? `<tr>
+                      <td style="padding: 7px 0; color: #94a3b8; font-weight: 600;">Company:</td>
+                      <td style="padding: 7px 0; color: #f8fafc;">${sanitizedCompany}</td>
+                    </tr>` : ""}
+                  </table>
+                </div>
+
+                <div style="margin-bottom: 22px;">
+                  <p style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 8px 0;">
+                    Message Content
+                  </p>
+                  <div style="background-color: #0f172a; border: 1px solid #1e293b; border-radius: 10px; padding: 14px 16px; font-size: 14px; line-height: 1.6; color: #e2e8f0; white-space: pre-wrap;">
+                    ${sanitizedMessage}
+                  </div>
+                </div>
+
+                <div style="border-top: 1px solid #1e293b; padding-top: 14px; font-size: 11px; color: #64748b;">
+                  <p style="margin: 0;">
+                    Source: <b>${validData.utm_source || "Direct"}</b> | Medium: <b>${validData.utm_medium || "None"}</b> | Campaign: <b>${validData.utm_campaign || "None"}</b>
+                  </p>
+                </div>
+              </div>
             `,
           }),
         });
+
+        const resendData = await resendRes.json().catch(() => ({}));
+        if (!resendRes.ok) {
+          logger.warn("RESEND_API_ERROR", { status: resendRes.status, details: resendData }, ip);
+        } else {
+          logger.info("RESEND_EMAIL_SENT", { emailId: resendData.id, to: sendTo }, ip);
+        }
       } catch (emailErr) {
         logger.warn("EMAIL_NOTIFICATION_FAILED", { error: String(emailErr) }, ip);
       }
