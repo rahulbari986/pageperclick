@@ -446,7 +446,7 @@ export default function Home() {
                 </div>
                 <div>
                   <motion.a
-                    href="mailto:pageperclick@gmail.com"
+                    href="mailto:contact@pageperclick.com"
                     whileHover={{ x: 8 }}
                     transition={{ type: "spring", stiffness: 350, damping: 20 }}
                     className="inline-flex items-center gap-3 sm:gap-4 py-3 sm:py-4 hover:border-primary transition-all group"
@@ -458,7 +458,7 @@ export default function Home() {
                       <Mail className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                     </div>
                     <span className="font-semibold text-base sm:text-lg group-hover:text-primary transition-colors break-all sm:break-normal">
-                      pageperclick@gmail.com
+                      contact@pageperclick.com
                     </span>
                   </motion.a>
                 </div>

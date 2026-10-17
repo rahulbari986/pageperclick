@@ -63,6 +63,25 @@ export async function GET(req: NextRequest) {
       filter.service = { $regex: new RegExp(escapeRegExp(service), "i") };
     }
 
+    const sourceParam = searchParams.get("source")?.trim();
+    if (sourceParam && sourceParam !== "ALL") {
+      if (sourceParam.toLowerCase() === "direct") {
+        const directFilter = [
+          { utm_source: null },
+          { utm_source: "" },
+          { utm_source: { $exists: false } },
+          { utm_source: { $regex: /^direct$/i } },
+        ];
+        if (filter.$and) {
+          (filter.$and as Record<string, unknown>[]).push({ $or: directFilter });
+        } else {
+          filter.$or = directFilter;
+        }
+      } else {
+        filter.utm_source = { $regex: new RegExp(escapeRegExp(sourceParam), "i") };
+      }
+    }
+
     if (search) {
       const escapedSearch = escapeRegExp(search);
       const searchOr = [
@@ -71,6 +90,10 @@ export async function GET(req: NextRequest) {
         { phone: { $regex: new RegExp(escapedSearch, "i") } },
         { company: { $regex: new RegExp(escapedSearch, "i") } },
         { message: { $regex: new RegExp(escapedSearch, "i") } },
+        { utm_source: { $regex: new RegExp(escapedSearch, "i") } },
+        { utm_medium: { $regex: new RegExp(escapedSearch, "i") } },
+        { utm_campaign: { $regex: new RegExp(escapedSearch, "i") } },
+        { ipAddress: { $regex: new RegExp(escapedSearch, "i") } },
       ];
       if (filter.$and) {
         (filter.$and as Record<string, unknown>[]).push({ $or: searchOr });

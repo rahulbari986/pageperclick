@@ -7,6 +7,12 @@ import { CircuitBreaker } from "@/lib/circuitBreaker";
 import { connectToDatabase } from "@/lib/mongodb";
 import { Contact } from "@/models/Contact";
 import { emitNewContact } from "@/lib/adminEventBus";
+import React from "react";
+import fs from "fs";
+import path from "path";
+import { render } from "@react-email/render";
+import PagePerClickEmail from "@/emails/PagePerClickEmail";
+import PagePerClickAdminEmail from "@/emails/PagePerClickAdminEmail";
 
 // Circuit breakers for external integrations
 const recaptchaBreaker = new CircuitBreaker("GoogleReCAPTCHA", { failureThreshold: 3, recoveryTimeout: 20000 });
@@ -161,36 +167,185 @@ export async function POST(req: NextRequest) {
       throw dbError;
     }
 
-    // 6. Optional Email Notification via Resend (if RESEND_API_KEY is configured)
+    // 6. Dual Email Notification via Resend (To Admin & To User)
     const resendApiKey = process.env.RESEND_API_KEY;
     if (resendApiKey) {
       try {
-        const sendTo = process.env.SEND_TO_EMAIL || "pageperclick@gmail.com";
+        const adminEmail = process.env.SEND_TO_EMAIL || "contact@pageperclick.com";
         const sendFrom = process.env.SEND_FROM_EMAIL || "noreply@pageperclick.com";
 
-        await fetch("https://api.resend.com/emails", {
+        // Read header banners & social icons for inline CID delivery
+        let clientHeaderBase64 = "";
+        let adminHeaderBase64 = "";
+        const socialBase64: Record<string, string> = {};
+        try {
+          const clientHeaderPath = path.join(process.cwd(), "public", "images", "email-header-client.png");
+          if (fs.existsSync(clientHeaderPath)) {
+            clientHeaderBase64 = fs.readFileSync(clientHeaderPath).toString("base64");
+          }
+          const adminHeaderPath = path.join(process.cwd(), "public", "images", "email-header-admin.png");
+          if (fs.existsSync(adminHeaderPath)) {
+            adminHeaderBase64 = fs.readFileSync(adminHeaderPath).toString("base64");
+          }
+          const socialDir = path.join(process.cwd(), "public", "images", "social");
+          const socialKeys = ["facebook", "instagram", "youtube", "linkedin", "x"] as const;
+          for (const key of socialKeys) {
+            const p = path.join(socialDir, `${key}.png`);
+            if (fs.existsSync(p)) {
+              socialBase64[key] = fs.readFileSync(p).toString("base64");
+            }
+          }
+        } catch {
+          // Fall back gracefully to remote URLs if file read fails
+        }
+
+        const socialIconUrls: Record<string, string> = {};
+        if (socialBase64.facebook) socialIconUrls.facebook = "cid:social-facebook";
+        if (socialBase64.instagram) socialIconUrls.instagram = "cid:social-instagram";
+        if (socialBase64.youtube) socialIconUrls.youtube = "cid:social-youtube";
+        if (socialBase64.linkedin) socialIconUrls.linkedin = "cid:social-linkedin";
+        if (socialBase64.x) socialIconUrls.x = "cid:social-x";
+
+        const formattedTimestamp = new Date().toLocaleString("en-US", {
+          timeZone: "Asia/Kolkata",
+          dateStyle: "medium",
+          timeStyle: "short",
+        }) + " IST";
+
+        // Admin notification email rendered with PagePerClick branded React Email template
+        const adminEmailHtml = await render(
+          React.createElement(PagePerClickAdminEmail, {
+            name: sanitizedFullName,
+            email: sanitizedEmail,
+            phone: formattedPhone,
+            service: sanitizedService,
+            company: sanitizedCompany,
+            message: sanitizedMessage,
+            utmSource: validData.utm_source || "Direct",
+            utmMedium: validData.utm_medium || "None",
+            utmCampaign: validData.utm_campaign || "None",
+            ipAddress: ip,
+            submittedAt: formattedTimestamp,
+            website: "https://www.pageperclick.com",
+            headerImageUrl: adminHeaderBase64 ? "cid:admin-header-banner" : undefined,
+          })
+        );
+
+        const adminEmailPayload: Record<string, unknown> = {
+          from: sendFrom,
+          to: adminEmail,
+          reply_to: sanitizedEmail,
+          subject: `🚀 New Lead: ${sanitizedFullName} - ${sanitizedService}`,
+          html: adminEmailHtml,
+        };
+
+        if (adminHeaderBase64) {
+          adminEmailPayload.attachments = [
+            {
+              filename: "email-header-admin.png",
+              content: adminHeaderBase64,
+              content_type: "image/png",
+              content_id: "admin-header-banner",
+              contentId: "admin-header-banner",
+            },
+          ];
+        }
+
+        const adminEmailPromise = fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${resendApiKey}`,
           },
-          body: JSON.stringify({
-            from: sendFrom,
-            to: sendTo,
-            subject: `🚀 New Contact Lead: ${sanitizedFullName}`,
-            html: `
-              <h2>New Website Lead</h2>
-              <p><b>Name:</b> ${sanitizedFullName}</p>
-              <p><b>Email:</b> ${sanitizedEmail}</p>
-              <p><b>Phone:</b> ${formattedPhone}</p>
-              <p><b>Service:</b> ${sanitizedService}</p>
-              <p><b>Company:</b> ${sanitizedCompany || "N/A"}</p>
-              <p><b>Message:</b> ${sanitizedMessage}</p>
-              <hr/>
-              <p><small>Source: ${validData.utm_source || "Direct"} | Medium: ${validData.utm_medium || "None"}</small></p>
-            `,
-          }),
+          body: JSON.stringify(adminEmailPayload),
         });
+
+        // User confirmation email rendered with PagePerClick branded React Email template
+        const userEmailHtml = await render(
+          React.createElement(PagePerClickEmail, {
+            name: sanitizedFullName,
+            email: sanitizedEmail,
+            phone: formattedPhone,
+            service: sanitizedService,
+            company: sanitizedCompany,
+            message: sanitizedMessage,
+            contactEmail: adminEmail,
+            website: "https://www.pageperclick.com",
+            headerImageUrl: clientHeaderBase64 ? "cid:client-header-banner" : undefined,
+            socialIconUrls: Object.keys(socialIconUrls).length > 0 ? socialIconUrls : undefined,
+          })
+        );
+
+        const userEmailAttachments: Array<{
+          filename: string;
+          content: string;
+          content_type: string;
+          content_id: string;
+          contentId: string;
+        }> = [];
+
+        if (clientHeaderBase64) {
+          userEmailAttachments.push({
+            filename: "email-header-client.png",
+            content: clientHeaderBase64,
+            content_type: "image/png",
+            content_id: "client-header-banner",
+            contentId: "client-header-banner",
+          });
+        }
+
+        const socialAttachmentDefs = [
+          { key: "facebook", cid: "social-facebook", filename: "facebook.png" },
+          { key: "instagram", cid: "social-instagram", filename: "instagram.png" },
+          { key: "youtube", cid: "social-youtube", filename: "youtube.png" },
+          { key: "linkedin", cid: "social-linkedin", filename: "linkedin.png" },
+          { key: "x", cid: "social-x", filename: "x.png" },
+        ] as const;
+
+        for (const item of socialAttachmentDefs) {
+          if (socialBase64[item.key]) {
+            userEmailAttachments.push({
+              filename: item.filename,
+              content: socialBase64[item.key],
+              content_type: "image/png",
+              content_id: item.cid,
+              contentId: item.cid,
+            });
+          }
+        }
+
+        const userEmailPayload: Record<string, unknown> = {
+          from: sendFrom,
+          to: sanitizedEmail,
+          reply_to: adminEmail,
+          subject: `Thank you for contacting PagePerClick, ${sanitizedFullName}!`,
+          html: userEmailHtml,
+        };
+
+        if (userEmailAttachments.length > 0) {
+          userEmailPayload.attachments = userEmailAttachments;
+        }
+
+        const userEmailPromise = fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${resendApiKey}`,
+          },
+          body: JSON.stringify(userEmailPayload),
+        });
+
+        const [adminResult, userResult] = await Promise.allSettled([
+          adminEmailPromise,
+          userEmailPromise,
+        ]);
+
+        if (adminResult.status === "rejected") {
+          logger.warn("ADMIN_EMAIL_DISPATCH_FAILED", { error: String(adminResult.reason) }, ip);
+        }
+        if (userResult.status === "rejected") {
+          logger.warn("USER_EMAIL_DISPATCH_FAILED", { error: String(userResult.reason) }, ip);
+        }
       } catch (emailErr) {
         logger.warn("EMAIL_NOTIFICATION_FAILED", { error: String(emailErr) }, ip);
       }

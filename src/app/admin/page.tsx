@@ -40,6 +40,12 @@ import {
   CheckCircle2,
   AlertCircle,
   Wifi,
+  Globe,
+  Compass,
+  Target,
+  Megaphone,
+  Activity,
+  Layers,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -151,6 +157,121 @@ export const STATUS_CONFIG: Record<
     activeMenuBg: "bg-emerald-500/10",
   },
 };
+
+export function getSourceInfo(source?: string | null, medium?: string | null) {
+  const s = (source || "").trim().toLowerCase();
+  const m = (medium || "").trim().toLowerCase();
+
+  if (!s || s === "direct" || s === "none" || s === "null" || s === "undefined") {
+    return {
+      label: "Direct",
+      badgeBg: "bg-slate-500/15",
+      badgeText: "text-slate-300",
+      badgeBorder: "border-slate-500/30",
+      dotColor: "bg-slate-400",
+      channel: "Direct",
+    };
+  }
+
+  if (s.includes("google") || s.includes("gads") || s.includes("adwords")) {
+    return {
+      label: "Google",
+      badgeBg: "bg-blue-500/15",
+      badgeText: "text-blue-400",
+      badgeBorder: "border-blue-500/30",
+      dotColor: "bg-blue-400",
+      channel: "Google",
+    };
+  }
+
+  if (s.includes("facebook") || s.includes("meta") || s.includes("fb")) {
+    return {
+      label: "Facebook",
+      badgeBg: "bg-indigo-500/15",
+      badgeText: "text-indigo-400",
+      badgeBorder: "border-indigo-500/30",
+      dotColor: "bg-indigo-400",
+      channel: "Meta",
+    };
+  }
+
+  if (s.includes("instagram") || s.includes("ig")) {
+    return {
+      label: "Instagram",
+      badgeBg: "bg-pink-500/15",
+      badgeText: "text-pink-400",
+      badgeBorder: "border-pink-500/30",
+      dotColor: "bg-pink-400",
+      channel: "Instagram",
+    };
+  }
+
+  if (s.includes("linkedin")) {
+    return {
+      label: "LinkedIn",
+      badgeBg: "bg-sky-500/15",
+      badgeText: "text-sky-400",
+      badgeBorder: "border-sky-500/30",
+      dotColor: "bg-sky-400",
+      channel: "LinkedIn",
+    };
+  }
+
+  if (s.includes("twitter") || s === "x" || s.includes("x.com")) {
+    return {
+      label: "X (Twitter)",
+      badgeBg: "bg-neutral-500/15",
+      badgeText: "text-neutral-300",
+      badgeBorder: "border-neutral-500/30",
+      dotColor: "bg-neutral-400",
+      channel: "Twitter",
+    };
+  }
+
+  if (s.includes("youtube") || s.includes("yt")) {
+    return {
+      label: "YouTube",
+      badgeBg: "bg-rose-500/15",
+      badgeText: "text-rose-400",
+      badgeBorder: "border-rose-500/30",
+      dotColor: "bg-rose-400",
+      channel: "YouTube",
+    };
+  }
+
+  if (s.includes("organic") || m.includes("organic") || s.includes("seo")) {
+    return {
+      label: "Organic Search",
+      badgeBg: "bg-emerald-500/15",
+      badgeText: "text-emerald-400",
+      badgeBorder: "border-emerald-500/30",
+      dotColor: "bg-emerald-400",
+      channel: "Organic",
+    };
+  }
+
+  if (s.includes("email") || m.includes("email") || s.includes("newsletter")) {
+    return {
+      label: "Email",
+      badgeBg: "bg-amber-500/15",
+      badgeText: "text-amber-400",
+      badgeBorder: "border-amber-500/30",
+      dotColor: "bg-amber-400",
+      channel: "Email",
+    };
+  }
+
+  const rawClean = source!.trim();
+  const formatted = rawClean.charAt(0).toUpperCase() + rawClean.slice(1);
+  return {
+    label: formatted,
+    badgeBg: "bg-purple-500/15",
+    badgeText: "text-purple-300",
+    badgeBorder: "border-purple-500/30",
+    dotColor: "bg-purple-400",
+    channel: formatted,
+  };
+}
 
 /**
  * Modern crystal harmonic chime for incoming leads (Web Audio API)
@@ -362,6 +483,7 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
   const [selectedCardFilter, setSelectedCardFilter] = useState<string>("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [searchTerm, setSearchTerm] = useState("");
+  const [sourceFilter, setSourceFilter] = useState("ALL");
 
   // Lead Detail Drawer State
   const [selectedLead, setSelectedLead] = useState<ContactLead | null>(null);
@@ -395,6 +517,20 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
   // Copy feedback
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Real-time acquisition source stats computed dynamically from leads
+  const sourceStats = useMemo(() => {
+    const counts: Record<string, number> = {};
+    contacts.forEach((c) => {
+      const src = getSourceInfo(c.utm_source, c.utm_medium).label;
+      counts[src] = (counts[src] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [contacts]);
+
+  const latestLead = useMemo(() => {
+    return contacts.length > 0 ? contacts[0] : null;
+  }, [contacts]);
+
   // Fetch leads from MongoDB Atlas API
   const fetchContacts = useCallback(
     async (showFullLoading = true) => {
@@ -409,6 +545,11 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
         // Status mapping
         if (statusFilter !== "ALL") {
           params.set("status", statusFilter);
+        }
+
+        // Source mapping
+        if (sourceFilter !== "ALL") {
+          params.set("source", sourceFilter);
         }
 
         const res = await fetch(`/api/v1/admin/contacts?${params.toString()}`, {
@@ -452,7 +593,7 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
         setIsRefreshing(false);
       }
     },
-    [searchTerm, statusFilter, isAuthenticated]
+    [searchTerm, statusFilter, sourceFilter, isAuthenticated]
   );
 
   // Initial load and debounced search/filter changes
@@ -509,17 +650,42 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
         eventSource.addEventListener("new-contact", (e) => {
           if (!isMounted) return;
           try {
-            const newLead = JSON.parse(e.data);
+            const rawLead = JSON.parse(e.data);
+            const newLead: ContactLead = {
+              ...rawLead,
+              fullName: decodeHtmlEntities(rawLead.fullName || ""),
+              company: decodeHtmlEntities(rawLead.company || ""),
+              service: decodeHtmlEntities(rawLead.service || ""),
+              message: decodeHtmlEntities(rawLead.message || ""),
+              adminNotes: decodeHtmlEntities(rawLead.adminNotes || ""),
+              status: rawLead.status || "NEW",
+              createdAt: rawLead.createdAt || new Date().toISOString(),
+              updatedAt: rawLead.updatedAt || new Date().toISOString(),
+            };
+
             playNotificationChime();
             toast.success(`🚀 New Enquiry: ${newLead.fullName || "New Lead"}`, {
               description: newLead.service ? `Subject: ${newLead.service}` : undefined,
               duration: 5000,
             });
+
             if (newLead._id) {
               setNewIncomingId(newLead._id);
               setTimeout(() => setNewIncomingId(null), 5000);
             }
-            // Silent sync to update stats counters and leads in background
+
+            // Real-time zero-latency optimistic update
+            setContacts((prev) => {
+              if (prev.some((c) => c._id === newLead._id)) return prev;
+              return [newLead, ...prev];
+            });
+            setStats((prev) => ({
+              ...prev,
+              totalAll: prev.totalAll + 1,
+              newCount: prev.newCount + 1,
+            }));
+
+            // Silent sync to update stats counters and reconcile with database
             fetchContacts(false);
           } catch (err) {
             console.error("Realtime new contact parse error:", err);
@@ -534,6 +700,7 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
             setContacts((prev) =>
               prev.map((c) => (c._id === updated._id ? { ...c, ...updated } : c))
             );
+            setSelectedLead((prev) => (prev && prev._id === updated._id ? { ...prev, ...updated } : prev));
             fetchContacts(false);
           } catch {
             // ignore
@@ -820,6 +987,7 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
       "UTM Source",
       "UTM Medium",
       "UTM Campaign",
+      "IP Address",
     ];
 
     const rows = contacts.map((c) => [
@@ -835,6 +1003,7 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
       `"${(c.utm_source || "").replace(/"/g, '""')}"`,
       `"${(c.utm_medium || "").replace(/"/g, '""')}"`,
       `"${(c.utm_campaign || "").replace(/"/g, '""')}"`,
+      `"${(c.ipAddress || "").replace(/"/g, '""')}"`,
     ]);
 
     const csvContent =
@@ -1252,6 +1421,123 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
           </motion.div>
         </div>
 
+        {/* Real-time Metadata & Traffic Sources Overview Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.12, ease: [0.22, 1, 0.36, 1] }}
+          className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-card/65 backdrop-blur-md border border-border shadow-sm relative overflow-hidden"
+        >
+          {/* Subtle gradient glow */}
+          <div className="absolute top-0 right-0 w-64 h-24 bg-gradient-to-l from-primary/10 via-accent/5 to-transparent pointer-events-none" />
+
+          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
+            {/* Left: Metadata Title & Interactive Realtime Source Filter Pills */}
+            <div className="space-y-2 flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="w-6 h-6 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center text-primary shrink-0">
+                  <Compass className="w-3.5 h-3.5" />
+                </div>
+                <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-foreground font-heading">
+                  Realtime Metadata & Acquisition Channels
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Live SSE Stream
+                </span>
+                {sourceFilter !== "ALL" && (
+                  <button
+                    onClick={() => setSourceFilter("ALL")}
+                    className="text-[10px] text-primary hover:underline font-semibold ml-auto sm:ml-0 cursor-pointer"
+                  >
+                    Reset Filter ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Source breakdown pills */}
+              <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                <button
+                  onClick={() => setSourceFilter("ALL")}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    sourceFilter === "ALL"
+                      ? "bg-primary text-white shadow-xs"
+                      : "bg-background/80 text-muted-foreground hover:text-foreground border border-border/70"
+                  }`}
+                >
+                  All Sources ({contacts.length})
+                </button>
+
+                {sourceStats.map(([srcLabel, count]) => {
+                  const isSelected = sourceFilter === srcLabel;
+                  const percentage = contacts.length > 0 ? Math.round((count / contacts.length) * 100) : 0;
+                  return (
+                    <button
+                      key={srcLabel}
+                      onClick={() => setSourceFilter(isSelected ? "ALL" : srcLabel)}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
+                        isSelected
+                          ? "bg-primary text-white border-primary shadow-xs"
+                          : "bg-background/80 text-muted-foreground hover:text-foreground border-border/70 hover:border-primary/40"
+                      }`}
+                      title={`Filter by ${srcLabel} (${percentage}% of submissions)`}
+                    >
+                      <span>{srcLabel}</span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                          isSelected ? "bg-white/20 text-white" : "bg-muted text-foreground"
+                        }`}
+                      >
+                        {count}
+                      </span>
+                      <span className="text-[10px] opacity-70">({percentage}%)</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Right: Latest Inbound Metadata Pulse Card */}
+            {latestLead ? (
+              <div className="flex items-center gap-2.5 p-2.5 rounded-xl bg-background/60 border border-border/70 shrink-0 self-stretch lg:self-auto">
+                <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/25 flex items-center justify-center text-primary shrink-0">
+                  <Activity className="w-4 h-4" />
+                </div>
+                <div className="text-xs space-y-0.5 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground">Latest Inbound:</span>
+                    <span className="font-semibold text-foreground truncate max-w-[130px]">
+                      {decodeHtmlEntities(latestLead.fullName)}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1 text-primary font-medium">
+                      <Globe className="w-3 h-3 shrink-0" />
+                      {latestLead.utm_source || "Direct"}
+                    </span>
+                    <span>•</span>
+                    <span className="text-muted-foreground/80 truncate max-w-[90px]">
+                      {latestLead.utm_medium || "organic"}
+                    </span>
+                    {latestLead.ipAddress && (
+                      <>
+                        <span>•</span>
+                        <span className="font-mono text-[10px] text-muted-foreground/70">
+                          {latestLead.ipAddress}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-muted-foreground flex items-center gap-1.5 p-2 rounded-xl bg-background/40 border border-border/50">
+                <Activity className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                <span>Awaiting inbound leads...</span>
+              </div>
+            )}
+          </div>
+        </motion.div>
 
         {/* Filter Tabs & Search Bar Container (Only NEW, PENDING, CONTACTED) */}
         <motion.div
@@ -1342,7 +1628,7 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
           </div>
 
           <div className="overflow-x-auto w-full">
-            <Table className="min-w-[820px] md:min-w-full">
+            <Table className="min-w-[940px] md:min-w-full">
             <TableHeader className="bg-card/80 border-b border-border">
               <TableRow className="border-border hover:bg-transparent">
                 <TableHead className="w-12 py-3.5 pl-5">
@@ -1369,6 +1655,9 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
                 </TableHead>
                 <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground py-3.5">
                   SUBJECT
+                </TableHead>
+                <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground py-3.5">
+                  SOURCE
                 </TableHead>
                 <TableHead className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground py-3.5">
                   STATUS
@@ -1399,6 +1688,9 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
                       <Skeleton className="w-40 h-4 bg-muted/40" />
                     </TableCell>
                     <TableCell className="py-4">
+                      <Skeleton className="w-20 h-5 rounded-full bg-muted/40" />
+                    </TableCell>
+                    <TableCell className="py-4">
                       <Skeleton className="w-16 h-6 rounded-full bg-muted/40" />
                     </TableCell>
                     <TableCell className="py-4 pr-5 text-right">
@@ -1409,7 +1701,7 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
               ) : contacts.length === 0 ? (
                 // Empty State
                 <TableRow>
-                  <TableCell colSpan={7} className="h-72 text-center">
+                  <TableCell colSpan={8} className="h-72 text-center">
                     <div className="max-w-sm mx-auto flex flex-col items-center justify-center">
                       <div className="w-12 h-12 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary mb-3 shadow-inner">
                         <Inbox className="w-5 h-5" />
@@ -1545,6 +1837,31 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
                             {decodeHtmlEntities(lead.message) || "No message body"}
                           </p>
                         </div>
+                      </TableCell>
+
+                      {/* SOURCE */}
+                      <TableCell className="py-3.5">
+                        {(() => {
+                          const srcInfo = getSourceInfo(lead.utm_source, lead.utm_medium);
+                          const subtext = [lead.utm_medium, lead.utm_campaign].filter(Boolean).join(" • ");
+                          return (
+                            <div className="flex flex-col gap-0.5 max-w-[140px]">
+                              <span
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border w-fit ${srcInfo.badgeBg} ${srcInfo.badgeText} ${srcInfo.badgeBorder}`}
+                                title={`Traffic Source: ${lead.utm_source || "Direct"}${lead.utm_medium ? ` | Medium: ${lead.utm_medium}` : ""}${lead.utm_campaign ? ` | Campaign: ${lead.utm_campaign}` : ""}${lead.ipAddress ? ` | IP: ${lead.ipAddress}` : ""}`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${srcInfo.dotColor}`} />
+                                <span className="truncate max-w-[95px]">{srcInfo.label}</span>
+                              </span>
+                              <span
+                                className="text-[10px] text-muted-foreground truncate pl-1"
+                                title={subtext || (lead.ipAddress ? `IP: ${lead.ipAddress}` : "Direct referral")}
+                              >
+                                {subtext || "direct"}
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </TableCell>
 
                       {/* STATUS (Matching User's Uploaded Dropdown EXACTLY) */}
@@ -1770,6 +2087,84 @@ function getAdminAuthHeaders(extraHeaders: Record<string, string> = {}) {
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+
+            {/* Realtime Metadata Card */}
+            <div className="bg-background/50 border border-border rounded-xl p-3 sm:p-4">
+              <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-border/60">
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-foreground uppercase tracking-wider">
+                  <Compass className="w-3.5 h-3.5 text-primary shrink-0" />
+                  <span>Acquisition & System Metadata</span>
+                </div>
+                <span className="text-[10px] font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/25 px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Realtime Captured
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+                {/* SOURCE */}
+                <div>
+                  <span className="text-[10px] font-bold text-muted-foreground tracking-wider uppercase block">
+                    SOURCE
+                  </span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <Globe className="w-3.5 h-3.5 text-primary shrink-0" />
+                    <span className="text-xs sm:text-sm font-bold text-foreground truncate" title={selectedLead.utm_source || "Direct"}>
+                      {selectedLead.utm_source || "Direct"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* MEDIUM */}
+                <div>
+                  <span className="text-[10px] font-bold text-muted-foreground tracking-wider uppercase block">
+                    MEDIUM
+                  </span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <Target className="w-3.5 h-3.5 text-secondary shrink-0" />
+                    <span className="text-xs sm:text-sm font-bold text-foreground truncate" title={selectedLead.utm_medium || "None"}>
+                      {selectedLead.utm_medium || "None / Organic"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* CAMPAIGN */}
+                <div>
+                  <span className="text-[10px] font-bold text-muted-foreground tracking-wider uppercase block">
+                    CAMPAIGN
+                  </span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <Megaphone className="w-3.5 h-3.5 text-accent shrink-0" />
+                    <span className="text-xs sm:text-sm font-bold text-foreground truncate" title={selectedLead.utm_campaign || "None"}>
+                      {selectedLead.utm_campaign || "Default / None"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* IP ADDRESS */}
+                <div>
+                  <span className="text-[10px] font-bold text-muted-foreground tracking-wider uppercase block">
+                    IP ADDRESS
+                  </span>
+                  <div className="flex items-center gap-1.5 mt-1 font-mono text-xs sm:text-sm font-bold text-foreground">
+                    <span className="truncate">{selectedLead.ipAddress || "127.0.0.1"}</span>
+                    {selectedLead.ipAddress && (
+                      <button
+                        onClick={() => handleCopy(selectedLead.ipAddress!, `pop-ip-${selectedLead._id}`, "IP Address")}
+                        className="text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors p-1 rounded-md shrink-0 inline-flex items-center cursor-pointer"
+                        title="Copy IP Address"
+                      >
+                        {copiedId === `pop-ip-${selectedLead._id}` ? (
+                          <Check className="w-3 h-3 text-emerald-400" />
+                        ) : (
+                          <Copy className="w-3 h-3" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 

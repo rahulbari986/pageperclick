@@ -196,10 +196,10 @@ export default function TermsAndConditionsPage() {
             <br />
             Email:{" "}
             <a
-              href="mailto:pageperclick@gmail.com"
+              href="mailto:contact@pageperclick.com"
               className="text-primary hover:underline transition-all inline-block hover:scale-105"
             >
-              pageperclick@gmail.com
+              contact@pageperclick.com
             </a>
             <br />
             Website:{" "}
