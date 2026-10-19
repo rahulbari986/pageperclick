@@ -178,6 +178,7 @@ export async function POST(req: NextRequest) {
           : `PagePerClick <${sendFromEmailOnly}>`;
 
         const siteUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://www.pageperclick.com").replace(/\/+$/, "");
+        const referenceId = "PPC-" + Date.now().toString(36).toUpperCase();
 
         const formattedTimestamp = new Date().toLocaleString("en-US", {
           timeZone: "Asia/Kolkata",
@@ -200,6 +201,7 @@ export async function POST(req: NextRequest) {
             ipAddress: ip,
             submittedAt: formattedTimestamp,
             website: siteUrl,
+            referenceId,
           })
         );
 
@@ -231,6 +233,8 @@ export async function POST(req: NextRequest) {
             message: sanitizedMessage,
             contactEmail: adminEmail,
             website: siteUrl,
+            referenceId,
+            submittedAt: formattedTimestamp,
           })
         );
 

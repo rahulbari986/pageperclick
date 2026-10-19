@@ -31,6 +31,7 @@ export type AdminLeadDetails = {
 export type PagePerClickAdminEmailProps = AdminLeadDetails & {
   website?: string;
   headerImageUrl?: string;
+  referenceId?: string;
 };
 
 const colors = {
@@ -100,6 +101,7 @@ export default function PagePerClickAdminEmail({
   submittedAt,
   website = "https://www.pageperclick.com",
   headerImageUrl,
+  referenceId,
 }: PagePerClickAdminEmailProps) {
   const normalizedWebsite = (website || "https://www.pageperclick.com").replace(/\/+$/, "");
   const headerSrc =
@@ -114,6 +116,7 @@ export default function PagePerClickAdminEmail({
   ];
 
   const attributionDetails = [
+    ...(referenceId ? [["Reference", `#${referenceId}`]] : []),
     ["Source", utmSource || "Direct"],
     ["Medium", utmMedium || "None"],
     ["Campaign", utmCampaign || "None"],
@@ -592,7 +595,36 @@ export default function PagePerClickAdminEmail({
               <br />
               Confidential &middot; For authorized team use only.
             </Text>
+
+            {referenceId && (
+              <Text
+                style={{
+                  margin: "6px 0 0",
+                  fontSize: "10px",
+                  lineHeight: "14px",
+                  color: "#64748B",
+                }}
+              >
+                Lead Ref: #{referenceId}
+              </Text>
+            )}
           </Section>
+
+          {/* Anti-quote dynamic delimiter: Prevents Gmail from collapsing footer into 'Show quoted text' */}
+          <div
+            style={{
+              display: "none",
+              fontSize: "1px",
+              color: "transparent",
+              lineHeight: "1px",
+              maxHeight: "0px",
+              maxWidth: "0px",
+              opacity: 0,
+              overflow: "hidden",
+            }}
+          >
+            {`ppc-lead-token:${referenceId || ""}`}
+          </div>
         </Container>
       </Body>
     </Html>

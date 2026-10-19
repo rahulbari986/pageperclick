@@ -26,6 +26,8 @@ export type PagePerClickEmailProps = InquiryDetails & {
   website?: string;
   headerImageUrl?: string;
   socialIconUrls?: Partial<Record<"facebook" | "instagram" | "youtube" | "linkedin" | "x", string>>;
+  referenceId?: string;
+  submittedAt?: string;
 };
 
 const colors = {
@@ -126,6 +128,8 @@ export default function PagePerClickEmail({
   website = "https://www.pageperclick.com",
   headerImageUrl,
   socialIconUrls,
+  referenceId,
+  submittedAt,
 }: PagePerClickEmailProps) {
   const normalizedWebsite = (website || "https://www.pageperclick.com").replace(/\/+$/, "");
   const headerSrc =
@@ -542,7 +546,7 @@ export default function PagePerClickEmail({
                 color: colors.navy,
               }}
             >
-              Best regards,
+              With warm regards,
               <br />
               <strong style={{ color: colors.navy, fontSize: "15px" }}>
                 The PagePerClick Team
@@ -686,7 +690,38 @@ export default function PagePerClickEmail({
                 Terms &amp; Conditions
               </Link>
             </Text>
+
+            {referenceId && (
+              <Text
+                style={{
+                  margin: "10px 0 0",
+                  fontSize: "10px",
+                  lineHeight: "15px",
+                  color: "#64748B",
+                  letterSpacing: "0.2px",
+                }}
+              >
+                Inquiry Ref: #{referenceId}
+                {submittedAt ? ` • Submitted ${submittedAt}` : ""}
+              </Text>
+            )}
           </Section>
+
+          {/* Dynamic unique token to prevent Gmail from collapsing repeating footer into 'Show quoted text' */}
+          <div
+            style={{
+              display: "none",
+              fontSize: "1px",
+              color: "transparent",
+              lineHeight: "1px",
+              maxHeight: "0px",
+              maxWidth: "0px",
+              opacity: 0,
+              overflow: "hidden",
+            }}
+          >
+            {`ppc-token:${referenceId || ""}`}
+          </div>
         </Container>
       </Body>
     </Html>
