@@ -172,7 +172,12 @@ export async function POST(req: NextRequest) {
     if (resendApiKey) {
       try {
         const adminEmail = process.env.SEND_TO_EMAIL || "contact@pageperclick.com";
-        const sendFrom = process.env.SEND_FROM_EMAIL || "noreply@pageperclick.com";
+        const rawSendFrom = process.env.SEND_FROM_EMAIL || "noreply@pageperclick.com";
+        const emailMatch = rawSendFrom.match(/<([^>]+)>/);
+        const sendFromEmailOnly = emailMatch ? emailMatch[1].trim() : rawSendFrom.trim();
+        const sendFrom = rawSendFrom.includes("<") && !rawSendFrom.toLowerCase().startsWith("noreply")
+          ? rawSendFrom
+          : `PagePerClick <${sendFromEmailOnly}>`;
 
         // Read header banners & social icons for inline CID delivery
         let clientHeaderBase64 = "";
