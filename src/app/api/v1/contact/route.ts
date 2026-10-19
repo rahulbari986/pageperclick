@@ -8,8 +8,6 @@ import { connectToDatabase } from "@/lib/mongodb";
 import { Contact } from "@/models/Contact";
 import { emitNewContact } from "@/lib/adminEventBus";
 import React from "react";
-import fs from "fs";
-import path from "path";
 import { renderEmail as render } from "@/emails/render";
 import PagePerClickEmail from "@/emails/PagePerClickEmail";
 import PagePerClickAdminEmail from "@/emails/PagePerClickAdminEmail";
@@ -179,37 +177,7 @@ export async function POST(req: NextRequest) {
           ? rawSendFrom
           : `PagePerClick <${sendFromEmailOnly}>`;
 
-        // Read header banners & social icons for inline CID delivery
-        let clientHeaderBase64 = "";
-        let adminHeaderBase64 = "";
-        const socialBase64: Record<string, string> = {};
-        try {
-          const clientHeaderPath = path.join(process.cwd(), "public", "images", "email-header-client.png");
-          if (fs.existsSync(clientHeaderPath)) {
-            clientHeaderBase64 = fs.readFileSync(clientHeaderPath).toString("base64");
-          }
-          const adminHeaderPath = path.join(process.cwd(), "public", "images", "email-header-admin.png");
-          if (fs.existsSync(adminHeaderPath)) {
-            adminHeaderBase64 = fs.readFileSync(adminHeaderPath).toString("base64");
-          }
-          const socialDir = path.join(process.cwd(), "public", "images", "social");
-          const socialKeys = ["facebook", "instagram", "youtube", "linkedin", "x"] as const;
-          for (const key of socialKeys) {
-            const p = path.join(socialDir, `${key}.png`);
-            if (fs.existsSync(p)) {
-              socialBase64[key] = fs.readFileSync(p).toString("base64");
-            }
-          }
-        } catch {
-          // Fall back gracefully to remote URLs if file read fails
-        }
-
-        const socialIconUrls: Record<string, string> = {};
-        if (socialBase64.facebook) socialIconUrls.facebook = "cid:social-facebook";
-        if (socialBase64.instagram) socialIconUrls.instagram = "cid:social-instagram";
-        if (socialBase64.youtube) socialIconUrls.youtube = "cid:social-youtube";
-        if (socialBase64.linkedin) socialIconUrls.linkedin = "cid:social-linkedin";
-        if (socialBase64.x) socialIconUrls.x = "cid:social-x";
+        const siteUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://www.pageperclick.com").replace(/\/+$/, "");
 
         const formattedTimestamp = new Date().toLocaleString("en-US", {
           timeZone: "Asia/Kolkata",
@@ -217,7 +185,7 @@ export async function POST(req: NextRequest) {
           timeStyle: "short",
         }) + " IST";
 
-        // Admin notification email rendered with PagePerClick branded React Email template
+        // Admin notification email rendered with PagePerClick branded React Email template (loads hosted CDN banner, no attachments)
         const adminEmailHtml = await render(
           React.createElement(PagePerClickAdminEmail, {
             name: sanitizedFullName,
@@ -231,8 +199,7 @@ export async function POST(req: NextRequest) {
             utmCampaign: validData.utm_campaign || "None",
             ipAddress: ip,
             submittedAt: formattedTimestamp,
-            website: "https://www.pageperclick.com",
-            headerImageUrl: adminHeaderBase64 ? "cid:admin-header-banner" : undefined,
+            website: siteUrl,
           })
         );
 
@@ -244,18 +211,6 @@ export async function POST(req: NextRequest) {
           html: adminEmailHtml,
         };
 
-        if (adminHeaderBase64) {
-          adminEmailPayload.attachments = [
-            {
-              filename: "email-header-admin.png",
-              content: adminHeaderBase64,
-              content_type: "image/png",
-              content_id: "admin-header-banner",
-              contentId: "admin-header-banner",
-            },
-          ];
-        }
-
         const adminEmailPromise = fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: {
@@ -265,7 +220,7 @@ export async function POST(req: NextRequest) {
           body: JSON.stringify(adminEmailPayload),
         });
 
-        // User confirmation email rendered with PagePerClick branded React Email template
+        // User confirmation email rendered with PagePerClick branded React Email template (loads hosted CDN banner & social icons, no attachments)
         const userEmailHtml = await render(
           React.createElement(PagePerClickEmail, {
             name: sanitizedFullName,
@@ -275,49 +230,9 @@ export async function POST(req: NextRequest) {
             company: sanitizedCompany,
             message: sanitizedMessage,
             contactEmail: adminEmail,
-            website: "https://www.pageperclick.com",
-            headerImageUrl: clientHeaderBase64 ? "cid:client-header-banner" : undefined,
-            socialIconUrls: Object.keys(socialIconUrls).length > 0 ? socialIconUrls : undefined,
+            website: siteUrl,
           })
         );
-
-        const userEmailAttachments: Array<{
-          filename: string;
-          content: string;
-          content_type: string;
-          content_id: string;
-          contentId: string;
-        }> = [];
-
-        if (clientHeaderBase64) {
-          userEmailAttachments.push({
-            filename: "email-header-client.png",
-            content: clientHeaderBase64,
-            content_type: "image/png",
-            content_id: "client-header-banner",
-            contentId: "client-header-banner",
-          });
-        }
-
-        const socialAttachmentDefs = [
-          { key: "facebook", cid: "social-facebook", filename: "facebook.png" },
-          { key: "instagram", cid: "social-instagram", filename: "instagram.png" },
-          { key: "youtube", cid: "social-youtube", filename: "youtube.png" },
-          { key: "linkedin", cid: "social-linkedin", filename: "linkedin.png" },
-          { key: "x", cid: "social-x", filename: "x.png" },
-        ] as const;
-
-        for (const item of socialAttachmentDefs) {
-          if (socialBase64[item.key]) {
-            userEmailAttachments.push({
-              filename: item.filename,
-              content: socialBase64[item.key],
-              content_type: "image/png",
-              content_id: item.cid,
-              contentId: item.cid,
-            });
-          }
-        }
 
         const userEmailPayload: Record<string, unknown> = {
           from: sendFrom,
@@ -326,10 +241,6 @@ export async function POST(req: NextRequest) {
           subject: `Thank you for contacting PagePerClick, ${sanitizedFullName}!`,
           html: userEmailHtml,
         };
-
-        if (userEmailAttachments.length > 0) {
-          userEmailPayload.attachments = userEmailAttachments;
-        }
 
         const userEmailPromise = fetch("https://api.resend.com/emails", {
           method: "POST",
