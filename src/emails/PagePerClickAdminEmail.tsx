@@ -12,7 +12,7 @@ import {
   Row,
   Column,
   Img,
-} from "@react-email/components";
+} from "./components";
 
 export type AdminLeadDetails = {
   name?: string;
@@ -193,7 +193,7 @@ export default function PagePerClickAdminEmail({
         </style>
       </Head>
       <Preview>
-        🚀 New Lead: {name} interested in {service || "Digital Marketing"}
+        Inbound inquiry details for {name} ({service || "General Inquiry"}).
       </Preview>
 
       <Body className="page-body" style={pageStyle}>
@@ -226,7 +226,7 @@ export default function PagePerClickAdminEmail({
             >
               <Img
                 src={headerSrc}
-                alt="New Client Opportunity Inbound!"
+                alt="PagePerClick Admin Notification"
                 width="640"
                 style={{
                   width: "100%",
@@ -254,7 +254,7 @@ export default function PagePerClickAdminEmail({
                 fontWeight: "bold",
               }}
             >
-              New Inbound Lead Received 🎯
+              Inbound Lead Notification
             </Text>
 
             <Text
@@ -300,7 +300,7 @@ export default function PagePerClickAdminEmail({
                   paddingBottom: "8px",
                 }}
               >
-                📋 Client Information
+                Client Information
               </Text>
 
               <table
@@ -373,7 +373,7 @@ export default function PagePerClickAdminEmail({
                   color: "#6B21A8",
                 }}
               >
-                💬 Client Message:
+                Client Message:
               </Text>
               <Text
                 className="body-text"
@@ -410,7 +410,7 @@ export default function PagePerClickAdminEmail({
                     marginBottom: "8px",
                   }}
                 >
-                  ✉️ Reply to {name.split(" ")[0] || "Client"}
+                  Reply to {name.split(" ")[0] || "Client"}
                 </Link>
               )}
               <Link
@@ -428,7 +428,7 @@ export default function PagePerClickAdminEmail({
                   marginBottom: "8px",
                 }}
               >
-                📊 Open Admin Portal
+                Open Admin Portal
               </Link>
             </Section>
 

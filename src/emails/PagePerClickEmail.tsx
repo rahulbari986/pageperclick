@@ -10,7 +10,7 @@ import {
   Link,
   Hr,
   Img,
-} from "@react-email/components";
+} from "./components";
 
 export type InquiryDetails = {
   name?: string;
@@ -367,7 +367,7 @@ export default function PagePerClickEmail({
                   paddingBottom: "8px",
                 }}
               >
-                📋 Your Inquiry Summary
+                Inquiry Summary
               </Text>
 
               <table
@@ -409,7 +409,7 @@ export default function PagePerClickEmail({
                   color: colors.navy,
                 }}
               >
-                🚀 What Happens Next?
+                What Happens Next
               </Text>
 
               <table

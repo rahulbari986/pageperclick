@@ -10,7 +10,7 @@ import { emitNewContact } from "@/lib/adminEventBus";
 import React from "react";
 import fs from "fs";
 import path from "path";
-import { render } from "@react-email/render";
+import { renderEmail as render } from "@/emails/render";
 import PagePerClickEmail from "@/emails/PagePerClickEmail";
 import PagePerClickAdminEmail from "@/emails/PagePerClickAdminEmail";
 
@@ -235,7 +235,7 @@ export async function POST(req: NextRequest) {
           from: sendFrom,
           to: adminEmail,
           reply_to: sanitizedEmail,
-          subject: `🚀 New Lead: ${sanitizedFullName} - ${sanitizedService}`,
+          subject: `New Lead: ${sanitizedFullName} - ${sanitizedService || "General Inquiry"}`,
           html: adminEmailHtml,
         };
 
